@@ -301,6 +301,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             return;
         }
 
+        // 대화 내용 검색 진행·결과 카드
+        if (query.trim() && contentFor()) list.append(createContentCard());
+
         const sections = getSections();
         if (sections.length === 0) {
             // 보기(캐릭터/그룹) 때문에 숨은 결과가 있으면 '없음'이 아니라 그렇다고 알려 주고 바로 풀 수 있게 한다
@@ -386,56 +389,60 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             footer.append(createFooterButton('fa-angles-down',
                 step ? tr('load_more', 'Load {0} more').replace('{0}', String(step)) : tr('load_all', 'Load all chats'),
                 () => loadMore()));
-            if (query.trim()) {
-                footer.append(
-                    createFooterButton('fa-magnifying-glass', tr('search_all', 'Search all chats'), () => load(0)),
-                    createHint(tr('search_all_hint', 'Loads every chat. This can take a while if you have many.')),
-                );
-            }
         }
-        if (query.trim()) renderContentFooter();
+        if (!query.trim()) return;
+
+        // 검색을 넓히는 방법들. 같은 모양의 카드로 둔다
+        if (hasMore) {
+            footer.append(createCard({
+                icon: 'fa-layer-group',
+                title: tr('search_all', 'Search all chats'),
+                sub: tr('search_all_sub', 'Also names and last messages of chats not loaded yet'),
+                onClick: () => void load(0),
+            }));
+        }
+        // 시작 버튼만 아래에 둔다. 진행·결과 카드는 목록 맨 위(renderList) — 결과가 계속 붙어 내려가도 휴대폰에서 보이도록
+        if (!contentFor()) footer.append(createContentCard());
     };
 
-    /** 대화 내용 검색 버튼·진행 상황 */
-    const renderContentFooter = () => {
+    /** 대화 내용 검색 카드: 시작 버튼 → 진행(막대·멈추기) → 결과 요약 */
+    const createContentCard = () => {
         const state = contentFor();
         if (!state) {
-            footer.append(
-                createFooterButton('fa-file-lines', tr('content_search', 'Search conversations too'), () => void startContentSearch()),
-                createHint(tr('content_search_hint', 'Reads every chat file to the end, so it can take a while. You can stop it anytime.')),
-            );
-            return;
+            return createCard({
+                icon: 'fa-comments',
+                title: tr('content_search', 'Search conversations too'),
+                sub: tr('content_search_sub', 'Every message of every chat · may take a while'),
+                onClick: () => void startContentSearch(),
+            });
         }
 
         const found = state.results.size;
+        const foundText = tr('content_found', '{0} found').replace('{0}', String(found));
         if (state.phase === 'search' || state.phase === 'snippet') {
-            const text = state.phase === 'search'
-                ? tr('content_searching', 'Searching conversations… {0}/{1}')
-                : tr('content_snippets', 'Loading matched messages… {0}/{1}');
-            const message = createMessage(text.replace('{0}', String(state.completed)).replace('{1}', String(state.total)));
-            message.prepend(createIcon('fa-spinner fa-spin'), ' ');
-            footer.append(message, createFooterButton('fa-stop', tr('content_stop', 'Stop'), () => stopContentSearch()));
-            return;
+            const step = state.phase === 'search'
+                ? tr('content_searching', 'Searching conversations…')
+                : tr('content_snippets', 'Loading matched messages…');
+            return createCard({
+                icon: 'fa-spinner fa-spin',
+                title: step,
+                sub: `${state.completed} / ${state.total} · ${foundText}`,
+                progress: state.total ? state.completed / state.total : 0,
+                action: { label: tr('content_stop', 'Stop'), onClick: () => stopContentSearch() },
+                tone: 'running',
+            });
         }
 
-        const summary = state.phase === 'stopped'
-            ? tr('content_stopped', 'Stopped. Found {0} chats so far.')
-            : tr('content_done', 'Conversation search finished. Found {0} chats.');
-        footer.append(createMessage(summary.replace('{0}', String(found))));
-        if (state.failed) {
-            footer.append(createHint(tr('content_failed', 'Could not read {0} characters/groups.').replace('{0}', String(state.failed))));
-        }
-        if (state.phase === 'stopped' || state.failed) {
-            footer.append(createFooterButton('fa-rotate-right', tr('content_again', 'Search again'), () => void startContentSearch()));
-        }
-    };
-
-    /** @param {string} text */
-    const createHint = (text) => {
-        const hint = document.createElement('small');
-        hint.className = 'st-lobby-footer-hint';
-        hint.textContent = text;
-        return hint;
+        const parts = [foundText];
+        if (state.failed) parts.push(tr('content_failed', '{0} could not be read').replace('{0}', String(state.failed)));
+        const stopped = state.phase === 'stopped';
+        return createCard({
+            icon: stopped ? 'fa-circle-pause' : 'fa-circle-check',
+            title: stopped ? tr('content_stopped', 'Conversation search stopped') : tr('content_done', 'Conversation search finished'),
+            sub: parts.join(' · '),
+            action: (stopped || state.failed) ? { label: tr('content_again', 'Search again'), onClick: () => void startContentSearch() } : undefined,
+            tone: 'done',
+        });
     };
 
     // ── 대화 내용 검색 ──
@@ -631,7 +638,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const snippet = place === 'content' ? contentFor()?.results.get(chat.key)?.snippet : undefined;
         if (place === 'content' && snippet) {
             preview.append(...highlightText(snippetAround(snippet, words), words));
-        } else if (place === 'content' && snippet === undefined && contentFor()?.phase === 'snippet') {
+        } else if (place === 'content' && snippet === undefined && ['search', 'snippet'].includes(contentFor()?.phase ?? '')) {
             preview.textContent = tr('snippet_loading', 'Loading the matched message…');
             preview.classList.add('st-lobby-preview-empty');
         } else if (chat.preview) {
@@ -999,6 +1006,66 @@ function createAvatar(chat) {
     img.src = chat.avatar ? getThumbnailUrl('avatar', chat.avatar) : 'img/five.png';
     wrapper.append(img);
     return wrapper;
+}
+
+/**
+ * 목록 아래의 카드(검색 넓히기·대화 내용 검색 진행). onClick 이 있으면 카드 전체가 버튼이다.
+ * @param {object} options
+ * @param {string} options.icon Font Awesome 아이콘 클래스
+ * @param {string} options.title
+ * @param {string} [options.sub] 아래 작은 줄
+ * @param {() => void} [options.onClick] 카드를 눌렀을 때
+ * @param {{ label: string, onClick: () => void }} [options.action] 오른쪽 작은 버튼(멈추기·다시 검색)
+ * @param {number} [options.progress] 0~1. 있으면 아래에 진행 막대
+ * @param {'idle' | 'running' | 'done'} [options.tone]
+ */
+function createCard({ icon, title, sub = '', onClick, action, progress, tone = 'idle' }) {
+    const card = document.createElement(onClick ? 'button' : 'div');
+    card.className = `st-lobby-card st-lobby-card-${tone}`;
+    if (card instanceof HTMLButtonElement) {
+        card.type = 'button';
+        card.addEventListener('click', onClick);
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'st-lobby-card-icon';
+    badge.append(createIcon(icon));
+
+    const text = document.createElement('span');
+    text.className = 'st-lobby-card-text';
+    const titleLine = document.createElement('span');
+    titleLine.className = 'st-lobby-card-title';
+    titleLine.textContent = title;
+    text.append(titleLine);
+    if (sub) {
+        const subLine = document.createElement('span');
+        subLine.className = 'st-lobby-card-sub';
+        subLine.textContent = sub;
+        text.append(subLine);
+    }
+    card.append(badge, text);
+
+    if (action) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'menu_button st-lobby-card-action';
+        button.textContent = action.label;
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            action.onClick();
+        });
+        card.append(button);
+    } else if (onClick) {
+        card.append(createIcon('fa-chevron-right st-lobby-card-chevron'));
+    }
+
+    if (typeof progress === 'number') {
+        const bar = document.createElement('span');
+        bar.className = 'st-lobby-card-progress';
+        bar.style.width = `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`;
+        card.append(bar);
+    }
+    return card;
 }
 
 /** @param {string} text */

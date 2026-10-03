@@ -368,22 +368,113 @@
 }
 
 .st-lobby-footer-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
     min-height: 44px;
     margin: 0;
-    justify-content: center;
     white-space: nowrap;
+}
+
+/* 목록 아래 카드: 검색 넓히기(모든 채팅에서 검색·대화 내용까지 검색)와 진행 상황 */
+.st-lobby-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    margin: 0;
+    padding: 8px 10px 8px 8px;
+    overflow: hidden;
+    border: 1px dashed var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+button.st-lobby-card {
+    cursor: pointer;
+}
+
+button.st-lobby-card:hover {
+    border-style: solid;
+    background-color: var(--white30a);
+}
+
+button.st-lobby-card:focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+    outline-offset: -2px;
+}
+
+.st-lobby-card-running,
+.st-lobby-card-done {
+    border-style: solid;
+    background-color: var(--black30a);
+}
+
+.st-lobby-card-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, transparent);
+    color: var(--SmartThemeQuoteColor);
+}
+
+.st-lobby-card-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.st-lobby-card-title {
+    font-weight: bold;
+}
+
+.st-lobby-card-sub {
+    font-size: 0.8em;
+    opacity: 0.65;
+}
+
+.st-lobby-card-chevron {
+    flex-shrink: 0;
+    font-size: 0.85em;
+    opacity: 0.5;
+}
+
+.st-lobby-card-action {
+    flex-shrink: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 14px;
+    white-space: nowrap;
+}
+
+/* 진행 막대: 카드 바닥에 얇게 */
+.st-lobby-card-progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    background-color: var(--SmartThemeQuoteColor);
+    transition: width 0.2s;
 }
 
 /* 목록 안의 안내 버튼(보기 필터 풀기)은 가운데에 글자 폭만큼 */
 .st-lobby-list > .st-lobby-footer-button {
     align-self: center;
+    width: auto;
     padding: 0 16px;
-}
-
-.st-lobby-footer-hint {
-    margin-top: -2px;
-    text-align: center;
-    opacity: 0.6;
 }
 
 /* 일괄 삭제 중에는 목록을 누르지 못하게 */
@@ -513,6 +604,19 @@
 
     .st-lobby-heading {
         min-height: 32px;
+    }
+
+    .st-lobby-card {
+        min-height: 44px;
+    }
+
+    .st-lobby-card-icon {
+        width: 28px;
+        height: 28px;
+    }
+
+    .st-lobby-card-action {
+        min-height: 28px;
     }
 
     .st-lobby-select-all,
