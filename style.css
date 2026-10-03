@@ -283,6 +283,16 @@
     white-space: nowrap;
 }
 
+.st-lobby-pin-icon {
+    margin-right: 2px;
+    font-size: 0.8em;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.st-lobby-menu-buttons .st-lobby-pinned {
+    color: var(--SmartThemeQuoteColor);
+}
+
 .st-lobby-group-icon {
     font-size: 0.85em;
     opacity: 0.7;

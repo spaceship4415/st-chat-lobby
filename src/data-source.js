@@ -1,6 +1,7 @@
 import { characters, getRequestHeaders } from '../../../../../script.js';
 import { groups } from '../../../../group-chats.js';
 import { timestampToMoment } from '../../../../utils.js';
+import { getPinnedEntries, getPinnedKeys, isPinned } from './pins.js';
 import { toPlainPreview } from './utils.js';
 
 /**
@@ -43,7 +44,9 @@ export function chatKey(chat) {
  * @returns {Promise<{ chats: LobbyChat[], hasMore: boolean }>}
  */
 export async function getAllChats(limit) {
-    const body = limit > 0 ? { max: limit + 1, pinned: [] } : { pinned: [] };
+    // 고정한 채팅은 서버가 개수 제한과 상관없이 맨 앞에 더 넣어 준다(오래된 채팅도 '고정' 묶음에 보이도록)
+    const pinned = getPinnedEntries();
+    const body = limit > 0 ? { max: limit + 1, pinned } : { pinned };
     const response = await fetch('/api/chats/recent', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -55,8 +58,12 @@ export async function getAllChats(limit) {
     const data = await response.json();
     if (!Array.isArray(data)) return { chats: [], hasMore: false };
 
-    const hasMore = limit > 0 && data.length > limit;
-    const items = hasMore ? data.slice(0, limit) : data;
+    // 맨 앞의 고정 채팅은 개수에서 뺀다(서버도 max 에 고정 수를 더해 준다)
+    const pinnedKeys = getPinnedKeys();
+    const pinnedCount = data.filter(item => typeof item?.file_name === 'string'
+        && isPinned({ groupId: item.group ?? '', avatar: item.avatar ?? '', fileName: item.file_name.replace(/\.jsonl$/, '') }, pinnedKeys)).length;
+    const hasMore = limit > 0 && data.length > limit + pinnedCount;
+    const items = hasMore ? data.slice(0, limit + pinnedCount) : data;
 
     /** @type {LobbyChat[]} */
     const chats = [];

@@ -30,7 +30,7 @@ https://github.com/spaceship4415/st-chat-lobby
 - **Sort**: Recent / Oldest / Name / Most messages / By character.
   Recent and Oldest are grouped under Today, Yesterday, This week, This month and month headings.
 - **⟳ Refresh** reloads the list.
-- **⋮** opens a small menu under the row with the chat's details, **Rename** and **Delete**. Rename refuses names that already exist (ignoring case). Delete asks first and cannot be undone.
+- **⋮** opens a small menu under the row with the chat's details, **Rename**, **Pin/Unpin** and **Delete**. Pinned chats are gathered in a **📌 Pinned** group at the top while browsing, even if they are older than the loaded chats. Rename refuses names that already exist (ignoring case). Delete asks first and cannot be undone.
   The chat that is open right now cannot be deleted.
 - **Select mode (☑)**: pick chats or *Select all* (visible chats), then **Delete**.
 
@@ -50,6 +50,6 @@ Extensions → **Chat Lobby**
 
 ## Notes
 
-- While enabled, the pin markers of SillyTavern's Recent Chats are not shown (pins are kept; turn the setting off to see them).
+- **Pins (📌) are SillyTavern's Recent Chats pins.** Pins made in SillyTavern show here and vice versa. SillyTavern reads its pin list once at startup, so pins changed here appear in its Recent Chats after a page reload.
 - Chats without an owner (files directly in the chats folder) are skipped, as in SillyTavern.
 - Opening a chat follows SillyTavern's own flow. Chats opened from this list skip the [Chat Setup](https://github.com/spaceship4415/st-chat-setup) entry dialog.

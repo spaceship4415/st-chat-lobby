@@ -1,6 +1,7 @@
 import { renderExtensionTemplateAsync } from '../../../extensions.js';
 import { EXTENSION_NAME, LOG_PREFIX } from './src/constants.js';
 import { installWandMenu } from './src/menu.js';
+import { installPinSync } from './src/pins.js';
 import { getSettings, loadSettings, setSetting } from './src/settings.js';
 import { installWelcome, refreshWelcome } from './src/welcome.js';
 
@@ -32,6 +33,7 @@ async function mountSettingsPanel() {
 
 jQuery(async () => {
     loadSettings();
+    installPinSync();
     installWelcome();
 
     try {

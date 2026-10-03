@@ -7,6 +7,7 @@ import { EXTENSION_NAME, LOG_PREFIX, SORTS } from './constants.js';
 import { chatKey, getAllChats, getChatOwners, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
 import { tr } from './i18n.js';
 import { askName } from './name-prompt.js';
+import { getPinnedKeys, isPinned, setPinned } from './pins.js';
 import { getSettings, setSetting } from './settings.js';
 import { formatMonth, formatShortDate, getDateBucket, hasName, highlightText, sanitizeChatName, snippetAround } from './utils.js';
 
@@ -348,6 +349,24 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                 .map(([place, title]) => ({ key: `found:${place}`, title, chats: byPlace[place] }));
         }
 
+        // 둘러볼 때는 고정한 채팅을 맨 위 '고정' 묶음에 모으고, 나머지를 정렬대로 묶는다(ST 최근 채팅과 같이)
+        const pinned = visible.filter(chat => isPinned(chat, pinnedKeys));
+        const rest = pinned.length ? visible.filter(chat => !isPinned(chat, pinnedKeys)) : visible;
+        const sections = getBrowseSections(rest);
+        if (!pinned.length) return sections;
+        // 제목 없는 한 묶음(이름·메시지 수 정렬)이면 고정 묶음과 구분되게 제목을 붙인다
+        if (sections.length === 1 && !sections[0].title) {
+            sections[0] = { ...sections[0], key: 'others', title: tr('others', 'Other chats') };
+        }
+        return [{ key: 'pinned', title: tr('pinned', 'Pinned'), chats: sortChats(pinned) }, ...sections];
+    };
+
+    /**
+     * 둘러볼 때의 묶음(정렬에 따라 날짜·캐릭터·없음)
+     * @param {LobbyChat[]} visible
+     * @returns {Section[]}
+     */
+    const getBrowseSections = (visible) => {
         switch (sort) {
             case 'name':
             case 'messages':
@@ -356,9 +375,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                 /** @type {Map<string, Section>} */
                 const byOwner = new Map();
                 for (const chat of visible) {
-                    const ownerKey = chat.groupId ? `g:${chat.groupId}` : `c:${chat.avatar}`;
-                    if (!byOwner.has(ownerKey)) byOwner.set(ownerKey, { key: `owner:${ownerKey}`, title: chat.ownerName, chats: [] });
-                    byOwner.get(ownerKey).chats.push(chat);
+                    const key = ownerKey(chat);
+                    if (!byOwner.has(key)) byOwner.set(key, { key: `owner:${key}`, title: chat.ownerName, chats: [] });
+                    byOwner.get(key).chats.push(chat);
                 }
                 // 묶음 안은 최근 순(원본 순서), 묶음은 이름 순
                 return [...byOwner.values()].sort((a, b) => compareName(a.title, b.title));
@@ -389,7 +408,11 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         .flatMap(section => section.chats);
 
     // ── 그리기 ──
+    /** 고정된 채팅 키. 그릴 때마다 한 번 읽는다(ST 가 그사이 바꿨을 수 있다) */
+    let pinnedKeys = getPinnedKeys();
+
     const renderAll = () => {
+        pinnedKeys = getPinnedKeys();
         ensureAll();
         renderList();
         renderFooter();
@@ -476,6 +499,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const title = document.createElement('span');
         title.className = 'st-lobby-heading-title';
         title.textContent = section.title;
+        if (section.key === 'pinned') title.prepend(createIcon('fa-thumbtack st-lobby-pin-icon'), ' ');
         const count = document.createElement('span');
         count.className = 'st-lobby-heading-count';
         count.textContent = `(${section.chats.length})`;
@@ -746,6 +770,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         top.className = 'st-lobby-top';
         const owner = document.createElement('span');
         owner.className = 'st-lobby-owner';
+        if (isPinned(chat, pinnedKeys)) owner.append(createIcon('fa-thumbtack st-lobby-pin-icon'), ' ');
         if (chat.groupId) owner.append(createIcon('fa-users st-lobby-group-icon'), ' ');
         // 검색 중이면 찾은 글자를 표시한다
         const words = getWords();
@@ -842,6 +867,20 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     /** 열린 '⋯' 메뉴의 채팅 key. 한 번에 하나만 */
     let menuKey = '';
 
+    /**
+     * 고정하거나 푼다(ST 최근 채팅의 고정과 같은 목록)
+     * @param {LobbyChat} chat
+     */
+    const togglePin = (chat) => {
+        const pin = !isPinned(chat, getPinnedKeys());
+        setPinned(chat, pin);
+        // 고정 묶음은 둘러볼 때 최근 채팅 목록에서 그리므로, 아직 안 불러온 채팅을 고정했으면 넣어 둔다
+        if (pin && chats && !chats.some(other => other.key === chat.key)) chats = [...chats, chat];
+        menuKey = '';
+        toastr.success(pin ? tr('pinned_toast', 'Pinned.') : tr('unpinned_toast', 'Unpinned.'), chat.fileName);
+        renderAll();
+    };
+
     /** @param {string} key */
     const toggleMenu = (key) => {
         menuKey = menuKey === key ? '' : key;
@@ -849,7 +888,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     };
 
     /**
-     * 줄 아래에 펼쳐지는 메뉴: 채팅 정보 한 줄 + [이름 바꾸기] [삭제]
+     * 줄 아래에 펼쳐지는 메뉴: 채팅 정보 한 줄 + [이름 바꾸기] [고정] [삭제]
      * @param {LobbyChat} chat
      * @param {boolean} open 지금 열린 채팅(삭제 불가)
      */
@@ -863,10 +902,14 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         const buttons = document.createElement('div');
         buttons.className = 'st-lobby-menu-buttons';
-        const renameButton = createFooterButton('fa-pen', tr('rename_title', 'Rename chat'), () => {
+        // 휴대폰에서 세 버튼이 한 줄에 들어가도록 글자는 짧게
+        const renameButton = createFooterButton('fa-pen', tr('rename_short', 'Rename'), () => {
             menuKey = '';
             void renameChat(chat);
         });
+        const pinned = isPinned(chat, pinnedKeys);
+        const pinButton = createFooterButton('fa-thumbtack', pinned ? tr('unpin', 'Unpin') : tr('pin', 'Pin'), () => togglePin(chat));
+        pinButton.classList.toggle('st-lobby-pinned', pinned);
         const deleteButton = createFooterButton('fa-trash-can', tr('delete', 'Delete'), () => {
             if (open) {
                 // 막아 두되 누르면 이유를 알려 준다(휴대폰에서는 비활성 버튼의 설명을 볼 수 없다)
@@ -878,7 +921,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         });
         deleteButton.classList.add('st-lobby-delete');
         if (open) deleteButton.setAttribute('aria-disabled', 'true');
-        buttons.append(renameButton, deleteButton);
+        buttons.append(renameButton, pinButton, deleteButton);
 
         menu.append(info, buttons);
         return menu;
@@ -976,6 +1019,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         if (allChats) allChats = sameList ? chats : allChats.filter(other => other.key !== chat.key);
         if (ownerChats) ownerChats = ownerChats.filter(other => other.key !== chat.key);
         content?.results.delete(chat.key);
+        // 지운 채팅이 고정 목록에 남지 않게(ST 는 지울 때 고정을 정리하지 않는다)
+        if (isPinned(chat)) setPinned(chat, false);
         selected.delete(chat.key);
     };
 
