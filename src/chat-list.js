@@ -8,11 +8,12 @@ import { chatKey, getAllChats } from './data-source.js';
 import { tr } from './i18n.js';
 import { askName } from './name-prompt.js';
 import { getSettings, setSetting } from './settings.js';
-import { formatMonth, formatShortDate, getDateBucket, hasName, sanitizeChatName } from './utils.js';
+import { formatMonth, formatShortDate, getDateBucket, hasName, highlightText, sanitizeChatName, snippetAround } from './utils.js';
 
 /** @typedef {import('./data-source.js').LobbyChat} LobbyChat */
 /** @typedef {'recent' | 'oldest' | 'name' | 'messages' | 'owner'} LobbySort */
 /** @typedef {'all' | 'character' | 'group'} LobbyFilter */
+/** @typedef {'owner' | 'name' | 'message'} MatchPlace */
 
 /** 일괄 삭제 확인 창에 이름을 몇 개까지 보여 줄지 */
 const CONFIRM_NAME_LIMIT = 5;
@@ -119,17 +120,51 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         return true;
     };
 
+    /** 검색 낱말(소문자). 검색하지 않으면 빈 배열 */
+    const getWords = () => query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+
+    /**
+     * 어디에서 찾았는지. 여러 낱말이면 모두 들어 있어야 하고(어느 칸에 있든), 가장 앞쪽 칸으로 본다:
+     * 모든 낱말이 캐릭터·그룹 이름에 있으면 'owner', 이름들(주인·채팅)만으로 되면 'name', 마지막 메시지가 필요하면 'message'.
+     * @param {LobbyChat} chat
+     * @param {string[]} words
+     * @returns {MatchPlace | null} 맞지 않으면 null
+     */
+    const getMatchPlace = (chat, words) => {
+        const owner = chat.ownerName.toLocaleLowerCase();
+        const name = chat.fileName.toLocaleLowerCase();
+        const preview = chat.preview.toLocaleLowerCase();
+        if (!words.every(word => owner.includes(word) || name.includes(word) || preview.includes(word))) return null;
+        if (words.every(word => owner.includes(word))) return 'owner';
+        if (words.every(word => owner.includes(word) || name.includes(word))) return 'name';
+        return 'message';
+    };
+
     /** @param {LobbyChat} chat */
     const matchesQuery = (chat) => {
-        const needle = query.trim().toLocaleLowerCase();
-        if (!needle) return true;
-        // 여러 낱말이면 모두 들어 있어야 한다(어느 칸에 있든)
-        const haystack = `${chat.ownerName}\n${chat.fileName}\n${chat.preview}`.toLocaleLowerCase();
-        return needle.split(/\s+/).every(word => haystack.includes(word));
+        const words = getWords();
+        return !words.length || getMatchPlace(chat, words) !== null;
     };
 
     /** @param {LobbyChat} chat */
     const matches = chat => matchesFilter(chat) && matchesQuery(chat);
+
+    const compareName = (/** @type {string} */ a, /** @type {string} */ b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+    /**
+     * 고른 정렬 순서로 늘어놓는다(제목 없이). 원본(최근 순)은 그대로 둔다
+     * @param {LobbyChat[]} list
+     */
+    const sortChats = (list) => {
+        switch (sort) {
+            case 'oldest': return [...list].reverse();
+            case 'name': return [...list].sort((a, b) => compareName(a.fileName, b.fileName) || compareName(a.ownerName, b.ownerName));
+            case 'messages': return [...list].sort((a, b) => b.count - a.count || b.lastTime - a.lastTime);
+            // 캐릭터별: 이름 순, 같은 주인 안에서는 최근 순(정렬은 안정적이라 원래 순서가 남는다)
+            case 'owner': return [...list].sort((a, b) => compareName(a.ownerName, b.ownerName));
+            default: return [...list];
+        }
+    };
 
     /**
      * @returns {{ title: string, chats: LobbyChat[] }[]} 제목별 묶음. 제목이 빈 문자열이면 제목 없이 보인다
@@ -137,13 +172,30 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const getSections = () => {
         if (!chats) return [];
         const visible = chats.filter(matches);
-        const compareName = (/** @type {string} */ a, /** @type {string} */ b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+        // 검색 중에는 날짜·캐릭터 대신 '어디에서 찾았는지'로 묶는다. 묶음 안은 고른 정렬 순서
+        const words = getWords();
+        if (words.length) {
+            /** @type {Record<MatchPlace, LobbyChat[]>} */
+            const byPlace = { owner: [], name: [], message: [] };
+            for (const chat of sortChats(visible)) {
+                byPlace[getMatchPlace(chat, words) ?? 'message'].push(chat);
+            }
+            /** @type {[MatchPlace, string][]} */
+            const titles = [
+                ['owner', tr('found_owner', 'Character / group name')],
+                ['name', tr('found_name', 'Chat name')],
+                ['message', tr('found_message', 'Last message')],
+            ];
+            return titles
+                .filter(([place]) => byPlace[place].length)
+                .map(([place, title]) => ({ title: `${title} (${byPlace[place].length})`, chats: byPlace[place] }));
+        }
 
         switch (sort) {
             case 'name':
-                return [{ title: '', chats: [...visible].sort((a, b) => compareName(a.fileName, b.fileName) || compareName(a.ownerName, b.ownerName)) }];
             case 'messages':
-                return [{ title: '', chats: [...visible].sort((a, b) => b.count - a.count || b.lastTime - a.lastTime) }];
+                return [{ title: '', chats: sortChats(visible) }];
             case 'owner': {
                 /** @type {Map<string, { title: string, chats: LobbyChat[] }>} */
                 const byOwner = new Map();
@@ -335,7 +387,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const owner = document.createElement('span');
         owner.className = 'st-lobby-owner';
         if (chat.groupId) owner.append(createIcon('fa-users st-lobby-group-icon'), ' ');
-        owner.append(chat.ownerName);
+        // 검색 중이면 찾은 글자를 표시한다
+        const words = getWords();
+        owner.append(...highlightText(chat.ownerName, words));
         const date = document.createElement('span');
         date.className = 'st-lobby-date';
         date.textContent = formatShortDate(chat.lastTime);
@@ -343,12 +397,18 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         const name = document.createElement('div');
         name.className = 'st-lobby-name';
-        name.textContent = chat.fileName;
+        name.append(...highlightText(chat.fileName, words));
 
         const preview = document.createElement('div');
         preview.className = 'st-lobby-preview';
-        preview.textContent = chat.preview || tr('preview_empty', '(No messages)');
-        preview.classList.toggle('st-lobby-preview-empty', !chat.preview);
+        if (chat.preview) {
+            // 미리보기는 두 줄만 보이므로, 마지막 메시지에서 찾았으면 찾은 글자 근처부터 보여 준다
+            const fromMessage = words.length > 0 && getMatchPlace(chat, words) === 'message';
+            preview.append(...highlightText(fromMessage ? snippetAround(chat.preview, words) : chat.preview, words));
+        } else {
+            preview.textContent = tr('preview_empty', '(No messages)');
+            preview.classList.add('st-lobby-preview-empty');
+        }
 
         const meta = document.createElement('div');
         meta.className = 'st-lobby-meta';

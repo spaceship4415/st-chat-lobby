@@ -256,6 +256,15 @@
     opacity: 0.5;
 }
 
+/* 검색에서 찾은 글자 */
+.st-lobby-mark {
+    padding: 0 1px;
+    border-radius: 3px;
+    background-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 40%, transparent);
+    color: inherit;
+    font-weight: bold;
+}
+
 .st-lobby-meta {
     font-size: 0.8em;
     opacity: 0.6;

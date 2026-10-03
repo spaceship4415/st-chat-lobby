@@ -70,6 +70,61 @@ export function toPlainPreview(text) {
         .trim();
 }
 
+/**
+ * 검색 낱말을 찾는 정규식(대소문자 무시). 낱말이 없으면 null
+ * @param {string[]} words
+ */
+function wordsPattern(words) {
+    const parts = words.filter(Boolean).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    // 긴 낱말부터: 'sera seraphina' 면 seraphina 전체를 한 번에 표시
+    parts.sort((a, b) => b.length - a.length);
+    return parts.length ? new RegExp(parts.join('|'), 'giu') : null;
+}
+
+/**
+ * 찾은 글자를 <mark> 로 감싼 노드들. 사용자 데이터라 글자는 텍스트 노드로만 넣는다.
+ * @param {string} text
+ * @param {string[]} words
+ * @returns {(string | HTMLElement)[]}
+ */
+export function highlightText(text, words) {
+    const pattern = wordsPattern(words);
+    if (!pattern || !text) return [text];
+
+    /** @type {(string | HTMLElement)[]} */
+    const nodes = [];
+    let last = 0;
+    for (const match of text.matchAll(pattern)) {
+        const index = match.index ?? 0;
+        if (index > last) nodes.push(text.slice(last, index));
+        const mark = document.createElement('mark');
+        mark.className = 'st-lobby-mark';
+        mark.textContent = match[0];
+        nodes.push(mark);
+        last = index + match[0].length;
+    }
+    if (last < text.length) nodes.push(text.slice(last));
+    return nodes;
+}
+
+/**
+ * 찾은 글자가 앞쪽에 보이도록 자른 미리보기. 앞에 조금(before 글자) 남기고 '…'를 붙인다.
+ * @param {string} text
+ * @param {string[]} words
+ * @param {number} [before]
+ */
+export function snippetAround(text, words, before = 20) {
+    const pattern = wordsPattern(words);
+    if (!pattern) return text;
+    const index = text.search(new RegExp(pattern.source, 'iu'));
+    if (index <= before) return text;
+    // 잘린 낱말로 시작하지 않게, 찾은 글자 앞의 첫 띄어쓰기 다음부터. 띄어쓰기가 없으면 그냥 자른다
+    let start = index - before;
+    const space = text.slice(start, index).search(/\s/);
+    if (space !== -1) start += space + 1;
+    return `…${text.slice(start)}`;
+}
+
 /** @param {number} n */
 const pad = n => String(n).padStart(2, '0');
 
