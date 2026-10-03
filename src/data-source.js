@@ -16,6 +16,13 @@ import { toPlainPreview } from './utils.js';
  * @property {string} preview 마지막 메시지 평문
  * @property {number} count 메시지 수
  * @property {string} size 파일 크기(사람이 읽는 형식)
+ * @property {boolean} [contentMatch] 대화 내용 검색(서버)에서 찾은 채팅
+ * @property {string} [snippet] 대화 내용 검색에서 찾은 메시지(평문). 아직 모르면 없음
+ */
+
+/**
+ * 대화 내용 검색의 단위: 캐릭터 하나 또는 그룹 하나.
+ * @typedef {{ avatar: string, groupId: string, name: string }} ChatOwner
  */
 
 /**
@@ -80,6 +87,98 @@ export async function getAllChats(limit) {
 
     chats.sort((a, b) => b.lastTime - a.lastTime || b.fileName.localeCompare(a.fileName));
     return { chats, hasMore };
+}
+
+/**
+ * 대화 내용 검색 대상(모든 캐릭터와 그룹)
+ * @returns {ChatOwner[]}
+ */
+export function getChatOwners() {
+    return [
+        ...characters.map(c => ({ avatar: String(c.avatar ?? ''), groupId: '', name: String(c.name ?? '') })).filter(o => o.avatar),
+        ...groups.filter(g => Array.isArray(g.chats) && g.chats.length).map(g => ({ avatar: '', groupId: String(g.id), name: String(g.name ?? '') })),
+    ];
+}
+
+/**
+ * 한 캐릭터·그룹의 채팅을 대화 내용까지 검색한다(서버가 채팅 파일을 끝까지 읽는다 — 느리다).
+ * 서버 규칙: 낱말이 모두 어느 메시지에든(서로 다른 메시지여도) 있거나 채팅 이름에 있으면 맞음. 대소문자 무시.
+ * 어느 메시지에서 찾았는지는 알려 주지 않는다(getMatchedMessage 로 따로 찾는다).
+ * @param {ChatOwner} owner
+ * @param {string} query
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<LobbyChat[]>}
+ */
+export async function searchOwnerChats(owner, query, signal) {
+    const response = await fetch('/api/chats/search', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(owner.groupId ? { query, group_id: owner.groupId } : { query, avatar_url: owner.avatar }),
+        signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data)) return [];
+
+    return data
+        .filter(item => typeof item?.file_name === 'string')
+        .map(item => {
+            const moment = timestampToMoment(item.last_mes);
+            const count = Number(item.message_count) || 0;
+            /** @type {LobbyChat} */
+            const chat = {
+                key: '',
+                avatar: owner.groupId ? '' : owner.avatar,
+                groupId: owner.groupId,
+                ownerName: owner.name,
+                fileName: item.file_name.replace(/\.jsonl$/, ''),
+                lastTime: moment.isValid() ? moment.valueOf() : 0,
+                preview: count > 0 && typeof item.preview_message === 'string' ? toPlainPreview(item.preview_message) : '',
+                count,
+                size: typeof item.file_size === 'string' ? item.file_size : '',
+                contentMatch: true,
+            };
+            chat.key = chatKey(chat);
+            return chat;
+        });
+}
+
+/**
+ * 대화 내용 검색에서 찾은 채팅의 '찾은 메시지'(평문). 채팅 파일 전체를 받으므로 찾은 채팅에만 쓴다.
+ * 모든 낱말이 든 첫 메시지, 없으면(낱말이 여러 메시지에 흩어진 경우) 낱말이 가장 많이 든 메시지.
+ * @param {LobbyChat} chat
+ * @param {string[]} words 소문자 낱말
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<string>} 못 찾으면 ''
+ */
+export async function getMatchedMessage(chat, words, signal) {
+    const response = await fetch(chat.groupId ? '/api/chats/group/get' : '/api/chats/get', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(chat.groupId
+            ? { id: chat.fileName }
+            : { ch_name: chat.ownerName, file_name: chat.fileName, avatar_url: chat.avatar }),
+        signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data)) return '';
+
+    let best = '';
+    let bestScore = 0;
+    // 첫 줄은 채팅 정보(헤더)
+    for (const message of data.slice(1)) {
+        const text = typeof message?.mes === 'string' ? message.mes : '';
+        if (!text) continue;
+        const lower = text.toLocaleLowerCase();
+        const score = words.filter(word => lower.includes(word)).length;
+        if (score > bestScore) {
+            best = text;
+            bestScore = score;
+            if (score === words.length) break;
+        }
+    }
+    return best ? toPlainPreview(best) : '';
 }
 
 /**

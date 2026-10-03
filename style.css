@@ -135,19 +135,58 @@
     gap: 6px;
 }
 
-/* 날짜·캐릭터 제목. 스크롤해도 위에 붙어 있다 */
+/* 묶음 제목(날짜·캐릭터·찾은 곳). 스크롤해도 위에 붙어 있고, 누르면 접고 편다 */
 .st-lobby-heading {
     position: sticky;
     top: 0;
     z-index: 1;
-    margin-top: 6px;
-    padding: 4px 6px;
-    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    margin: 6px 0 0;
+    padding: 0 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
     background-color: var(--SmartThemeBlurTintColor);
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
-    font-size: 0.85em;
+    color: inherit;
+    font: inherit;
+    font-size: 0.9em;
     font-weight: bold;
-    opacity: 0.9;
+    text-align: left;
+    cursor: pointer;
+}
+
+.st-lobby-heading:focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+    outline-offset: -2px;
+}
+
+.st-lobby-heading-icon {
+    flex-shrink: 0;
+    width: 1em;
+    font-size: 0.85em;
+    opacity: 0.7;
+    transition: transform 0.15s;
+}
+
+.st-lobby-heading-collapsed .st-lobby-heading-icon {
+    transform: rotate(-90deg);
+}
+
+.st-lobby-heading-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-lobby-heading-count {
+    flex-shrink: 0;
+    font-weight: normal;
+    opacity: 0.7;
 }
 
 .st-lobby-item {
@@ -470,6 +509,10 @@
     .st-lobby-icon-button {
         width: 32px;
         height: 32px;
+    }
+
+    .st-lobby-heading {
+        min-height: 32px;
     }
 
     .st-lobby-select-all,

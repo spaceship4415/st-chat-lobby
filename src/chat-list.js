@@ -4,7 +4,7 @@ import { getGroupAvatar, groups } from '../../../../group-chats.js';
 import { Popup } from '../../../../popup.js';
 import { deleteLobbyChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
 import { EXTENSION_NAME, FILTERS, LOG_PREFIX, SORTS } from './constants.js';
-import { chatKey, getAllChats } from './data-source.js';
+import { chatKey, getAllChats, getChatOwners, getMatchedMessage, searchOwnerChats } from './data-source.js';
 import { tr } from './i18n.js';
 import { askName } from './name-prompt.js';
 import { getSettings, setSetting } from './settings.js';
@@ -13,7 +13,24 @@ import { formatMonth, formatShortDate, getDateBucket, hasName, highlightText, sa
 /** @typedef {import('./data-source.js').LobbyChat} LobbyChat */
 /** @typedef {'recent' | 'oldest' | 'name' | 'messages' | 'owner'} LobbySort */
 /** @typedef {'all' | 'character' | 'group'} LobbyFilter */
-/** @typedef {'owner' | 'name' | 'message'} MatchPlace */
+/** @typedef {'owner' | 'name' | 'message' | 'content'} MatchPlace */
+/** @typedef {{ key: string, title: string, chats: LobbyChat[] }} Section 제목이 빈 문자열이면 제목(접기) 없이 보인다 */
+/**
+ * @typedef {Object} ContentSearch
+ * @property {string} query 이 검색어로 찾은 결과
+ * @property {string[]} words
+ * @property {'search' | 'snippet' | 'done' | 'stopped'} phase 캐릭터·그룹 검색 → 찾은 메시지 불러오기 → 끝(또는 중지)
+ * @property {number} completed 검색을 마친 캐릭터·그룹 수 (snippet 단계에서는 찾은 메시지를 불러온 수)
+ * @property {number} total
+ * @property {number} failed 읽지 못한 캐릭터·그룹 수
+ * @property {Map<string, LobbyChat>} results key → 찾은 채팅
+ * @property {AbortController} controller
+ */
+
+/** 대화 내용 검색에서 동시에 검색할 캐릭터·그룹 수 */
+const CONTENT_SEARCH_WORKERS = 3;
+/** 찾은 메시지(채팅 파일 전체를 받아야 함)를 불러올 최대 채팅 수. 넘으면 나머지는 마지막 메시지를 보여 준다 */
+const SNIPPET_LIMIT = 100;
 
 /** 일괄 삭제 확인 창에 이름을 몇 개까지 보여 줄지 */
 const CONFIRM_NAME_LIMIT = 5;
@@ -72,6 +89,14 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const selected = new Set();
     /** 이름 바꾸기·삭제 처리 중(겹쳐 실행하지 않도록) */
     let managing = false;
+    /** @type {Set<string>} 접은 묶음의 key. 이 목록이 떠 있는 동안만 기억한다 */
+    const collapsed = new Set();
+    /**
+     * 대화 내용 검색(별도 버튼). 서버가 채팅 파일을 끝까지 읽어 느리므로 누를 때만 돌린다.
+     * 검색어가 바뀌면 멈추고 버린다(결과가 그 검색어 기준이라서).
+     * @type {ContentSearch | null}
+     */
+    let content = null;
 
     const loadStep = () => getSettings().loadCount;
     /** 다시 불러올 때 쓸 개수: 지금까지 불러온 만큼(전부 불러왔으면 계속 전부) */
@@ -140,10 +165,33 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         return 'message';
     };
 
+    /** 대화 내용 검색 결과가 지금 검색어 것인지 */
+    const contentFor = () => (content && content.query === query.trim() ? content : null);
+
+    /**
+     * 찾은 곳. 이름·마지막 메시지에서 못 찾았어도 대화 내용 검색에서 찾았으면 'content'
+     * @param {LobbyChat} chat
+     * @param {string[]} words
+     * @returns {MatchPlace | null}
+     */
+    const getPlace = (chat, words) => getMatchPlace(chat, words) ?? (contentFor()?.results.has(chat.key) ? 'content' : null);
+
     /** @param {LobbyChat} chat */
     const matchesQuery = (chat) => {
         const words = getWords();
-        return !words.length || getMatchPlace(chat, words) !== null;
+        return !words.length || getPlace(chat, words) !== null;
+    };
+
+    /**
+     * 목록에 놓일 채팅: 불러온 채팅 + 대화 내용 검색에서 찾은, 아직 안 불러온 채팅
+     * @returns {LobbyChat[]}
+     */
+    const getCandidates = () => {
+        if (!chats) return [];
+        const found = contentFor()?.results;
+        if (!found?.size) return chats;
+        const loaded = new Set(chats.map(chat => chat.key));
+        return [...chats, ...[...found.values()].filter(chat => !loaded.has(chat.key))];
     };
 
     /** @param {LobbyChat} chat */
@@ -157,66 +205,67 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
      */
     const sortChats = (list) => {
         switch (sort) {
-            case 'oldest': return [...list].reverse();
+            case 'oldest': return [...list].sort((a, b) => a.lastTime - b.lastTime);
             case 'name': return [...list].sort((a, b) => compareName(a.fileName, b.fileName) || compareName(a.ownerName, b.ownerName));
             case 'messages': return [...list].sort((a, b) => b.count - a.count || b.lastTime - a.lastTime);
             // 캐릭터별: 이름 순, 같은 주인 안에서는 최근 순(정렬은 안정적이라 원래 순서가 남는다)
-            case 'owner': return [...list].sort((a, b) => compareName(a.ownerName, b.ownerName));
-            default: return [...list];
+            case 'owner': return [...list].sort((a, b) => compareName(a.ownerName, b.ownerName) || b.lastTime - a.lastTime);
+            // 대화 내용 검색 결과가 뒤에 붙어 오므로 최근 순도 다시 정렬한다
+            default: return [...list].sort((a, b) => b.lastTime - a.lastTime);
         }
     };
 
-    /**
-     * @returns {{ title: string, chats: LobbyChat[] }[]} 제목별 묶음. 제목이 빈 문자열이면 제목 없이 보인다
-     */
+    /** @returns {Section[]} */
     const getSections = () => {
         if (!chats) return [];
-        const visible = chats.filter(matches);
+        const visible = getCandidates().filter(matches);
 
         // 검색 중에는 날짜·캐릭터 대신 '어디에서 찾았는지'로 묶는다. 묶음 안은 고른 정렬 순서
         const words = getWords();
         if (words.length) {
             /** @type {Record<MatchPlace, LobbyChat[]>} */
-            const byPlace = { owner: [], name: [], message: [] };
+            const byPlace = { owner: [], name: [], message: [], content: [] };
             for (const chat of sortChats(visible)) {
-                byPlace[getMatchPlace(chat, words) ?? 'message'].push(chat);
+                byPlace[getPlace(chat, words) ?? 'message'].push(chat);
             }
             /** @type {[MatchPlace, string][]} */
             const titles = [
                 ['owner', tr('found_owner', 'Character / group name')],
                 ['name', tr('found_name', 'Chat name')],
                 ['message', tr('found_message', 'Last message')],
+                ['content', tr('found_content', 'Conversation')],
             ];
             return titles
                 .filter(([place]) => byPlace[place].length)
-                .map(([place, title]) => ({ title: `${title} (${byPlace[place].length})`, chats: byPlace[place] }));
+                .map(([place, title]) => ({ key: `found:${place}`, title, chats: byPlace[place] }));
         }
 
         switch (sort) {
             case 'name':
             case 'messages':
-                return [{ title: '', chats: sortChats(visible) }];
+                return [{ key: '', title: '', chats: sortChats(visible) }];
             case 'owner': {
-                /** @type {Map<string, { title: string, chats: LobbyChat[] }>} */
+                /** @type {Map<string, Section>} */
                 const byOwner = new Map();
                 for (const chat of visible) {
                     const ownerKey = chat.groupId ? `g:${chat.groupId}` : `c:${chat.avatar}`;
-                    if (!byOwner.has(ownerKey)) byOwner.set(ownerKey, { title: chat.ownerName, chats: [] });
+                    if (!byOwner.has(ownerKey)) byOwner.set(ownerKey, { key: `owner:${ownerKey}`, title: chat.ownerName, chats: [] });
                     byOwner.get(ownerKey).chats.push(chat);
                 }
                 // 묶음 안은 최근 순(원본 순서), 묶음은 이름 순
                 return [...byOwner.values()].sort((a, b) => compareName(a.title, b.title));
             }
             default: {
-                const ordered = sort === 'oldest' ? [...visible].reverse() : visible;
-                /** @type {{ title: string, chats: LobbyChat[] }[]} */
+                // 'recent' 또는 'oldest'
+                const ordered = sortChats(visible);
+                /** @type {Section[]} */
                 const sections = [];
                 const now = new Date();
                 let lastKey = null;
                 for (const chat of ordered) {
                     const bucket = getDateBucket(chat.lastTime, now);
                     if (bucket.key !== lastKey) {
-                        sections.push({ title: getBucketTitle(bucket), chats: [] });
+                        sections.push({ key: `date:${bucket.key}`, title: getBucketTitle(bucket), chats: [] });
                         lastKey = bucket.key;
                     }
                     sections[sections.length - 1].chats.push(chat);
@@ -226,7 +275,10 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         }
     };
 
-    const getVisibleChats = () => getSections().flatMap(section => section.chats);
+    /** 펼쳐진 묶음의 채팅(화면에 보이는 것). 접은 묶음의 채팅은 '모두 선택'에 들어가지 않는다 */
+    const getVisibleChats = () => getSections()
+        .filter(section => !section.key || !collapsed.has(section.key))
+        .flatMap(section => section.chats);
 
     // ── 그리기 ──
     const renderAll = () => {
@@ -252,7 +304,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const sections = getSections();
         if (sections.length === 0) {
             // 보기(캐릭터/그룹) 때문에 숨은 결과가 있으면 '없음'이 아니라 그렇다고 알려 주고 바로 풀 수 있게 한다
-            const hiddenByFilter = filter !== 'all' ? chats.filter(matchesQuery).length : 0;
+            const hiddenByFilter = filter !== 'all' ? getCandidates().filter(matchesQuery).length : 0;
             if (hiddenByFilter) {
                 const kind = filter === 'group' ? tr('filter_group_noun', 'group chats') : tr('filter_character_noun', 'character chats');
                 list.append(
@@ -272,17 +324,48 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         }
 
         for (const section of sections) {
-            if (section.title) {
-                const heading = document.createElement('div');
-                heading.className = 'st-lobby-heading';
-                heading.setAttribute('role', 'presentation');
-                heading.textContent = section.title;
-                list.append(heading);
-            }
+            const isCollapsed = !!section.key && collapsed.has(section.key);
+            if (section.title) list.append(createHeading(section, isCollapsed));
+            // 접은 묶음은 줄을 아예 만들지 않는다(채팅이 많을 때 그리는 양도 준다)
+            if (isCollapsed) continue;
             for (const chat of section.chats) {
                 list.append(createItem(chat));
             }
         }
+    };
+
+    /**
+     * 묶음 제목. 누르면 접고 편다. 스크롤해도 위에 붙어 있어서, 긴 묶음을 내려가다가도 바로 접을 수 있다.
+     * @param {Section} section
+     * @param {boolean} isCollapsed
+     */
+    const createHeading = (section, isCollapsed) => {
+        const heading = document.createElement('button');
+        heading.type = 'button';
+        heading.className = 'st-lobby-heading';
+        heading.dataset.section = section.key;
+        heading.setAttribute('aria-expanded', String(!isCollapsed));
+        heading.classList.toggle('st-lobby-heading-collapsed', isCollapsed);
+        heading.title = isCollapsed ? tr('section_expand', 'Expand') : tr('section_collapse', 'Collapse');
+
+        const title = document.createElement('span');
+        title.className = 'st-lobby-heading-title';
+        title.textContent = section.title;
+        const count = document.createElement('span');
+        count.className = 'st-lobby-heading-count';
+        count.textContent = `(${section.chats.length})`;
+        heading.append(createIcon('fa-chevron-down st-lobby-heading-icon'), title, count);
+
+        heading.addEventListener('click', () => {
+            if (collapsed.has(section.key)) collapsed.delete(section.key);
+            else collapsed.add(section.key);
+            renderList();
+            renderSelectBar();
+            // 위에 붙은 제목을 눌러 접었으면 그 아래 줄들이 사라지며 제목이 화면 밖으로 밀려난다. 다시 보이게 한다
+            const next = [...list.querySelectorAll('.st-lobby-heading')].find(el => /** @type {HTMLElement} */ (el).dataset.section === section.key);
+            next?.scrollIntoView({ block: 'nearest' });
+        });
+        return heading;
     };
 
     const renderFooter = () => {
@@ -298,19 +381,161 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             footer.append(createFooterButton('fa-rotate-right', tr('retry', 'Try again'), () => load(currentLimit())));
             return;
         }
-        if (!hasMore) return;
-
-        const step = loadStep();
-        footer.append(createFooterButton('fa-angles-down',
-            step ? tr('load_more', 'Load {0} more').replace('{0}', String(step)) : tr('load_all', 'Load all chats'),
-            () => loadMore()));
-        if (query.trim()) {
-            const button = createFooterButton('fa-magnifying-glass', tr('search_all', 'Search all chats'), () => load(0));
-            const hint = document.createElement('small');
-            hint.className = 'st-lobby-footer-hint';
-            hint.textContent = tr('search_all_hint', 'Loads every chat. This can take a while if you have many.');
-            footer.append(button, hint);
+        if (hasMore) {
+            const step = loadStep();
+            footer.append(createFooterButton('fa-angles-down',
+                step ? tr('load_more', 'Load {0} more').replace('{0}', String(step)) : tr('load_all', 'Load all chats'),
+                () => loadMore()));
+            if (query.trim()) {
+                footer.append(
+                    createFooterButton('fa-magnifying-glass', tr('search_all', 'Search all chats'), () => load(0)),
+                    createHint(tr('search_all_hint', 'Loads every chat. This can take a while if you have many.')),
+                );
+            }
         }
+        if (query.trim()) renderContentFooter();
+    };
+
+    /** 대화 내용 검색 버튼·진행 상황 */
+    const renderContentFooter = () => {
+        const state = contentFor();
+        if (!state) {
+            footer.append(
+                createFooterButton('fa-file-lines', tr('content_search', 'Search conversations too'), () => void startContentSearch()),
+                createHint(tr('content_search_hint', 'Reads every chat file to the end, so it can take a while. You can stop it anytime.')),
+            );
+            return;
+        }
+
+        const found = state.results.size;
+        if (state.phase === 'search' || state.phase === 'snippet') {
+            const text = state.phase === 'search'
+                ? tr('content_searching', 'Searching conversations… {0}/{1}')
+                : tr('content_snippets', 'Loading matched messages… {0}/{1}');
+            const message = createMessage(text.replace('{0}', String(state.completed)).replace('{1}', String(state.total)));
+            message.prepend(createIcon('fa-spinner fa-spin'), ' ');
+            footer.append(message, createFooterButton('fa-stop', tr('content_stop', 'Stop'), () => stopContentSearch()));
+            return;
+        }
+
+        const summary = state.phase === 'stopped'
+            ? tr('content_stopped', 'Stopped. Found {0} chats so far.')
+            : tr('content_done', 'Conversation search finished. Found {0} chats.');
+        footer.append(createMessage(summary.replace('{0}', String(found))));
+        if (state.failed) {
+            footer.append(createHint(tr('content_failed', 'Could not read {0} characters/groups.').replace('{0}', String(state.failed))));
+        }
+        if (state.phase === 'stopped' || state.failed) {
+            footer.append(createFooterButton('fa-rotate-right', tr('content_again', 'Search again'), () => void startContentSearch()));
+        }
+    };
+
+    /** @param {string} text */
+    const createHint = (text) => {
+        const hint = document.createElement('small');
+        hint.className = 'st-lobby-footer-hint';
+        hint.textContent = text;
+        return hint;
+    };
+
+    // ── 대화 내용 검색 ──
+    /** 찾는 동안 결과가 하나씩 들어오므로 모아서 다시 그린다 */
+    let renderTimer = 0;
+    const scheduleRender = () => {
+        if (renderTimer) return;
+        renderTimer = window.setTimeout(() => {
+            renderTimer = 0;
+            renderAll();
+        }, 200);
+    };
+
+    const stopContentSearch = () => {
+        if (!content) return;
+        content.controller.abort();
+        if (content.phase === 'search' || content.phase === 'snippet') content.phase = 'stopped';
+        renderAll();
+    };
+
+    /** 검색어가 바뀌면 지난 대화 내용 검색은 멈추고 버린다 */
+    const dropStaleContentSearch = () => {
+        if (content && content.query !== query.trim()) {
+            content.controller.abort();
+            content = null;
+        }
+    };
+
+    const startContentSearch = async () => {
+        const words = getWords();
+        if (!words.length) return;
+        if (content) content.controller.abort();
+
+        const owners = getChatOwners();
+        /** @type {ContentSearch} */
+        const state = {
+            query: query.trim(),
+            words,
+            phase: 'search',
+            completed: 0,
+            total: owners.length,
+            failed: 0,
+            results: new Map(),
+            controller: new AbortController(),
+        };
+        content = state;
+        const { signal } = state.controller;
+        // 목록이 화면에서 사라졌으면(시작 화면이 닫힘) 더 할 필요가 없다
+        const alive = () => content === state && !signal.aborted && root.isConnected;
+        renderAll();
+
+        // 1) 캐릭터·그룹마다 서버 검색. 몇 개씩 동시에
+        const queue = [...owners];
+        const searchWorker = async () => {
+            while (queue.length && alive()) {
+                const owner = /** @type {import('./data-source.js').ChatOwner} */ (queue.shift());
+                try {
+                    const found = await searchOwnerChats(owner, state.query, signal);
+                    if (!alive()) return;
+                    for (const chat of found) state.results.set(chat.key, chat);
+                } catch (error) {
+                    if (!alive()) return;
+                    console.warn(LOG_PREFIX, 'conversation search failed for', owner, error);
+                    state.failed++;
+                }
+                state.completed++;
+                scheduleRender();
+            }
+        };
+        await Promise.all(Array.from({ length: CONTENT_SEARCH_WORKERS }, searchWorker));
+        if (!alive()) {
+            if (!root.isConnected) state.controller.abort();
+            return;
+        }
+
+        // 2) 이름·마지막 메시지로는 못 찾은 채팅만 '찾은 메시지'를 불러온다(채팅 파일 전체를 받아야 해서)
+        const needSnippet = sortChats([...state.results.values()].filter(chat => getMatchPlace(chat, words) === null)).slice(0, SNIPPET_LIMIT);
+        state.phase = 'snippet';
+        state.completed = 0;
+        state.total = needSnippet.length;
+        renderAll();
+        const snippetQueue = [...needSnippet];
+        const snippetWorker = async () => {
+            while (snippetQueue.length && alive()) {
+                const chat = /** @type {LobbyChat} */ (snippetQueue.shift());
+                try {
+                    chat.snippet = await getMatchedMessage(chat, words, signal);
+                } catch (error) {
+                    if (!alive()) return;
+                    console.warn(LOG_PREFIX, 'failed to load the matched message', chat, error);
+                    chat.snippet = '';
+                }
+                state.completed++;
+                scheduleRender();
+            }
+        };
+        await Promise.all([snippetWorker(), snippetWorker()]);
+        if (!alive()) return;
+        state.phase = 'done';
+        renderAll();
     };
 
     /** 불러온 일부만으로 검색·정렬하고 있다는 안내 */
@@ -401,9 +626,17 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         const preview = document.createElement('div');
         preview.className = 'st-lobby-preview';
-        if (chat.preview) {
+        const place = words.length ? getPlace(chat, words) : null;
+        // 대화 내용에서 찾았으면 찾은 메시지를 보여 준다(불러온 채팅이면 결과 쪽 객체에 들어 있다)
+        const snippet = place === 'content' ? contentFor()?.results.get(chat.key)?.snippet : undefined;
+        if (place === 'content' && snippet) {
+            preview.append(...highlightText(snippetAround(snippet, words), words));
+        } else if (place === 'content' && snippet === undefined && contentFor()?.phase === 'snippet') {
+            preview.textContent = tr('snippet_loading', 'Loading the matched message…');
+            preview.classList.add('st-lobby-preview-empty');
+        } else if (chat.preview) {
             // 미리보기는 두 줄만 보이므로, 마지막 메시지에서 찾았으면 찾은 글자 근처부터 보여 준다
-            const fromMessage = words.length > 0 && getMatchPlace(chat, words) === 'message';
+            const fromMessage = place === 'message';
             preview.append(...highlightText(fromMessage ? snippetAround(chat.preview, words) : chat.preview, words));
         } else {
             preview.textContent = tr('preview_empty', '(No messages)');
@@ -517,6 +750,14 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             chat.fileName = actual;
             chat.key = chatKey(chat);
             if (selected.delete(oldKey)) selected.add(chat.key);
+            // 대화 내용 검색 결과에도 같은 채팅이 따로 들어 있을 수 있다
+            const result = content?.results.get(oldKey);
+            if (content && result) {
+                content.results.delete(oldKey);
+                result.fileName = actual;
+                result.key = chat.key;
+                content.results.set(chat.key, result);
+            }
             toastr.success(tr('renamed', 'Chat renamed.'), actual);
         } catch (error) {
             console.error(LOG_PREFIX, 'failed to rename chat', error);
@@ -535,6 +776,16 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const remainingSiblings = (chat, removing) => (chats ?? [])
         .filter(other => !other.groupId && other.avatar === chat.avatar && !removing.has(other.key))
         .map(other => other.fileName);
+
+    /**
+     * 지운 채팅을 목록·대화 내용 검색 결과·선택에서 뺀다
+     * @param {LobbyChat} chat
+     */
+    const forgetChat = (chat) => {
+        chats = (chats ?? []).filter(other => other.key !== chat.key);
+        content?.results.delete(chat.key);
+        selected.delete(chat.key);
+    };
 
     /** @param {LobbyChat} chat */
     const deleteChat = async (chat) => {
@@ -559,13 +810,12 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             okButton: tr('delete', 'Delete'),
             cancelButton: tr('cancel', 'Cancel'),
         });
-        if (!confirmed || !chats?.includes(chat)) return;
+        if (!confirmed || !getCandidates().includes(chat)) return;
 
         managing = true;
         try {
             await deleteLobbyChat(chat, remainingSiblings(chat, new Set([chat.key])));
-            chats = chats.filter(other => other !== chat);
-            selected.delete(chat.key);
+            forgetChat(chat);
             toastr.success(tr('deleted', 'Chat deleted.'), chat.fileName);
         } catch (error) {
             console.error(LOG_PREFIX, 'failed to delete chat', error);
@@ -578,7 +828,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     const deleteSelected = async () => {
         if (managing || !chats) return;
-        const targets = chats.filter(chat => selected.has(chat.key) && !isOpenChat(chat));
+        const targets = getCandidates().filter(chat => selected.has(chat.key) && !isOpenChat(chat));
         if (!targets.length) return;
         if (isChatBusy()) {
             toastr.info(tr('busy', 'Please wait until the reply is finished and the chat is saved.'));
@@ -625,8 +875,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                 try {
                     if (isOpenChat(chat)) throw new Error('open chat');
                     await deleteLobbyChat(chat, remainingSiblings(chat, removing));
-                    chats = (chats ?? []).filter(other => other !== chat);
-                    selected.delete(chat.key);
+                    forgetChat(chat);
                     done++;
                 } catch (error) {
                     console.error(LOG_PREFIX, 'failed to delete chat', chat, error);
@@ -664,6 +913,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         clearTimeout(searchTimer);
         searchTimer = window.setTimeout(() => {
             query = searchInput.value;
+            dropStaleContentSearch();
             renderAll();
         }, 150);
     });

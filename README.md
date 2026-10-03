@@ -24,6 +24,9 @@ https://github.com/spaceship4415/st-chat-lobby
 - **Search** looks in character/group names, chat names and the **last message** only (not earlier messages). Several words must all match.
   Results are grouped by where they matched (character/group name, chat name, last message) and the matched text is highlighted.
   If the Show filter hides matches, the list says how many and offers **Show all**. The Show filter is not remembered; Sort is.
+- **Collapse groups**: tap a heading (date, character or match place) to collapse or expand it. Headings stick to the top while scrolling. *Select all* skips collapsed groups.
+- **Search conversations too**: a separate button below search results. It searches every message of every chat (all characters and groups) and lists matches under **Conversation**, previewing the matched message.
+  It reads whole chat files, so it can be slow; progress is shown and you can **Stop** anytime. Changing the search text discards the results.
 - **Show**: All / Characters / Groups. **Sort**: Recent / Oldest / Name / Most messages / By character.
   Recent and Oldest are grouped under Today, Yesterday, This week, This month and month headings.
 - **⟳ Refresh** reloads the list.
