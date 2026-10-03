@@ -75,6 +75,16 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     let loadFailed = false;
     /** 지금 불러온 개수 기준(0 = 전부) */
     let loadedLimit = 0;
+    /**
+     * 검색·정렬용 전체 채팅. 둘러볼 때는 최근 N개만 보이지만, 검색하거나 최근 순이 아닌 정렬을 고르면
+     * 자동으로 전부를 대상으로 한다('불러온 N개 안에서' 같은 개념을 사용자가 알 필요 없도록).
+     * 한 번 받아 두고 다시 쓴다. null = 아직 안 받음
+     * @type {LobbyChat[] | null}
+     */
+    let allChats = null;
+    let allLoading = false;
+    let allFailed = false;
+    let allToken = 0;
     /** 늦게 도착한 응답을 버리기 위한 번호 */
     let loadToken = 0;
     let query = '';
@@ -187,8 +197,56 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         else renderAll();
     };
 
-    /** 지금 목록의 바탕: 캐릭터를 골랐으면 그 캐릭터의 채팅 전부, 아니면 불러온 최근 채팅 */
-    const getBase = () => (ownerFilter ? ownerChats : chats);
+    /**
+     * 전체 채팅이 필요한지: 검색 중이거나, 일부만으로는 틀린 결과가 나오는 정렬(오래된·이름·메시지 수).
+     * 최근 순·캐릭터별은 둘러보기라 최근 채팅 + 더 불러오기로 충분하다(정렬은 기억되므로, 열 때마다 전부 받지 않도록).
+     * 캐릭터를 골랐으면 그 캐릭터의 채팅이 이미 전부 있다
+     */
+    const needsAll = () => !ownerFilter && (!!query.trim() || ['oldest', 'name', 'messages'].includes(sort));
+
+    /** 필요하면 전체 채팅을 받아 둔다. 최근 목록이 이미 전부면 그대로 쓴다 */
+    const ensureAll = () => {
+        if (!needsAll() || allChats || allLoading || allFailed) return;
+        if (chats && !hasMore) {
+            allChats = chats;
+            return;
+        }
+        const token = ++allToken;
+        allLoading = true;
+        getAllChats(0)
+            .then((result) => {
+                if (token !== allToken) return;
+                allChats = result.chats;
+            })
+            .catch((error) => {
+                if (token !== allToken) return;
+                console.error(LOG_PREFIX, 'failed to load all chats', error);
+                allFailed = true;
+            })
+            .finally(() => {
+                if (token !== allToken) return;
+                allLoading = false;
+                renderAll();
+            });
+    };
+
+    /** 전체 채팅을 버리고 다음에 필요할 때 다시 받는다(새로 고침) */
+    const resetAll = () => {
+        allToken++;
+        allChats = null;
+        allLoading = false;
+        allFailed = false;
+    };
+
+    /**
+     * 지금 목록의 바탕: 캐릭터를 골랐으면 그 캐릭터의 채팅 전부, 검색·정렬 중이면 전체 채팅(받는 동안은 최근 채팅),
+     * 아니면 최근 채팅
+     */
+    const getBase = () => {
+        if (ownerFilter) return ownerChats;
+        if (needsAll()) return allChats ?? chats;
+        return chats;
+    };
 
     // ── 보이는 목록 ──
     /** @param {LobbyChat} chat */
@@ -332,11 +390,14 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     // ── 그리기 ──
     const renderAll = () => {
+        ensureAll();
         renderList();
         renderFooter();
         renderNote();
         renderSelectBar();
-        onCount(chats ? `${chats.length}${hasMore ? '+' : ''}` : '');
+        // 전체 개수를 알 때만 보여 준다('50+' 같은 표시는 뜻이 모호하다)
+        const total = allChats?.length ?? (chats && !hasMore ? chats.length : null);
+        onCount(total === null ? '' : String(total));
     };
 
     const renderList = () => {
@@ -447,22 +508,12 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             footer.append(createFooterButton('fa-rotate-right', tr('retry', 'Try again'), () => load(currentLimit())));
             return;
         }
-        if (hasMore) {
+        // 더 불러오기는 최근 순으로 둘러볼 때만. 검색·다른 정렬은 이미 전체가 대상이다
+        if (hasMore && !needsAll()) {
             const step = loadStep();
             footer.append(createFooterButton('fa-angles-down',
                 step ? tr('load_more', 'Load {0} more').replace('{0}', String(step)) : tr('load_all', 'Load all chats'),
                 () => loadMore()));
-        }
-        if (!query.trim()) return;
-
-        // 검색을 넓히는 방법들. 같은 모양의 카드로 둔다
-        if (hasMore) {
-            footer.append(createCard({
-                icon: 'fa-layer-group',
-                title: tr('search_all', 'Search all chats'),
-                sub: tr('search_all_sub', 'Also names and last messages of chats not loaded yet'),
-                onClick: () => void load(0),
-            }));
         }
         // 대화 내용 검색 카드는 목록 맨 위(renderList)에 있다
     };
@@ -608,14 +659,27 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         renderAll();
     };
 
-    /** 불러온 일부만으로 검색·정렬하고 있다는 안내 */
+    /** 전체 채팅을 받는 중이거나 못 받았을 때만 한 줄 안내(그동안은 최근 채팅으로 보여 준다) */
     const renderNote = () => {
-        // 캐릭터를 골랐으면 그 캐릭터의 채팅은 전부 있으므로 해당 없음
-        const partial = !ownerFilter && !!chats && hasMore && (!!query.trim() || sort !== 'recent');
-        note.hidden = !partial;
-        note.textContent = partial
-            ? tr('partial_note', 'Showing only the {0} most recent chats loaded so far.').replace('{0}', String(chats.length))
-            : '';
+        note.replaceChildren();
+        const waiting = needsAll() && !allChats;
+        note.hidden = !waiting || (!allLoading && !allFailed);
+        if (note.hidden) return;
+        if (allLoading) {
+            note.append(createIcon('fa-spinner fa-spin'), ' ', query.trim()
+                ? tr('all_loading_search', 'Searching all chats…')
+                : tr('all_loading_sort', 'Loading all chats to sort…'));
+            return;
+        }
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'st-lobby-note-retry';
+        retry.textContent = tr('retry', 'Try again');
+        retry.addEventListener('click', () => {
+            allFailed = false;
+            renderAll();
+        });
+        note.append(tr('all_failed', 'Could not load all chats; showing recent ones only.'), ' ', retry);
     };
 
     const getSelectableVisible = () => getVisibleChats().filter(chat => !isOpenChat(chat));
@@ -686,14 +750,29 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         // 검색 중이면 찾은 글자를 표시한다
         const words = getWords();
         owner.append(...highlightText(chat.ownerName, words));
+        top.append(owner);
+        if (open) {
+            const badge = document.createElement('span');
+            badge.className = 'st-lobby-badge';
+            badge.textContent = tr('open_badge', 'Open now');
+            top.append(badge);
+        }
         const date = document.createElement('span');
         date.className = 'st-lobby-date';
         date.textContent = formatShortDate(chat.lastTime);
-        top.append(owner, date);
+        top.append(date);
 
-        const name = document.createElement('div');
+        // 채팅 이름은 한 줄(넘치면 …). 메시지 수는 같은 줄 오른쪽
+        const nameRow = document.createElement('div');
+        nameRow.className = 'st-lobby-name-row';
+        const name = document.createElement('span');
         name.className = 'st-lobby-name';
         name.append(...highlightText(chat.fileName, words));
+        const count = document.createElement('span');
+        count.className = 'st-lobby-count';
+        count.title = tr('message_count', '{0} messages').replace('{0}', String(chat.count));
+        count.append(createIcon('fa-comment'), ` ${chat.count}`);
+        nameRow.append(name, count);
 
         const preview = document.createElement('div');
         preview.className = 'st-lobby-preview';
@@ -706,7 +785,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             preview.textContent = tr('snippet_loading', 'Loading the matched message…');
             preview.classList.add('st-lobby-preview-empty');
         } else if (chat.preview) {
-            // 미리보기는 두 줄만 보이므로, 마지막 메시지에서 찾았으면 찾은 글자 근처부터 보여 준다
+            // 미리보기는 한 줄만 보이므로, 마지막 메시지에서 찾았으면 찾은 글자 근처부터 보여 준다
             const fromMessage = place === 'message';
             preview.append(...highlightText(fromMessage ? snippetAround(chat.preview, words) : chat.preview, words));
         } else {
@@ -714,17 +793,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             preview.classList.add('st-lobby-preview-empty');
         }
 
-        const meta = document.createElement('div');
-        meta.className = 'st-lobby-meta';
-        meta.textContent = [tr('message_count', '{0} messages').replace('{0}', String(chat.count)), chat.size].filter(Boolean).join(' · ');
-        if (open) {
-            const badge = document.createElement('span');
-            badge.className = 'st-lobby-badge';
-            badge.textContent = tr('open_badge', 'Open now');
-            meta.append(' ', badge);
-        }
-
-        body.append(top, name, preview, meta);
+        body.append(top, nameRow, preview);
         main.append(body);
         main.title = `${chat.ownerName} – ${chat.fileName}`;
 
@@ -752,23 +821,67 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             activate();
         });
 
-        item.append(main);
+        const row = document.createElement('div');
+        row.className = 'st-lobby-row-main';
+        row.append(main);
+        item.append(row);
 
+        // 이름 바꾸기·삭제는 '⋯' 뒤에 둔다. 늘 보이면 줄마다 폭을 차지해 이름이 여러 줄로 접히고,
+        // 휴대폰에서 스크롤하다 삭제를 잘못 누르기 쉽다
         if (!selecting) {
-            const actions = document.createElement('div');
-            actions.className = 'st-lobby-actions';
-            const renameButton = createActionButton('fa-pen', tr('rename_title', 'Rename chat'), () => renameChat(chat));
-            const deleteButton = createActionButton('fa-trash-can', tr('delete_button', 'Delete chat'), () => deleteChat(chat));
-            deleteButton.classList.add('st-lobby-delete');
-            if (open) {
-                // 막아 두되 누르면 이유를 알려 준다(휴대폰에서는 비활성 버튼의 설명을 볼 수 없다)
-                deleteButton.setAttribute('aria-disabled', 'true');
-                deleteButton.title = tr('delete_open', 'The chat that is open right now cannot be deleted.');
-            }
-            actions.append(renameButton, deleteButton);
-            item.append(actions);
+            const menuOpen = menuKey === chat.key;
+            const more = createActionButton('fa-ellipsis-vertical', tr('more_actions', 'More'), () => toggleMenu(chat.key));
+            more.classList.add('st-lobby-more');
+            more.setAttribute('aria-expanded', String(menuOpen));
+            row.append(more);
+            if (menuOpen) item.append(createItemMenu(chat, open));
         }
         return item;
+    };
+
+    /** 열린 '⋯' 메뉴의 채팅 key. 한 번에 하나만 */
+    let menuKey = '';
+
+    /** @param {string} key */
+    const toggleMenu = (key) => {
+        menuKey = menuKey === key ? '' : key;
+        renderList();
+    };
+
+    /**
+     * 줄 아래에 펼쳐지는 메뉴: 채팅 정보 한 줄 + [이름 바꾸기] [삭제]
+     * @param {LobbyChat} chat
+     * @param {boolean} open 지금 열린 채팅(삭제 불가)
+     */
+    const createItemMenu = (chat, open) => {
+        const menu = document.createElement('div');
+        menu.className = 'st-lobby-menu';
+
+        const info = document.createElement('div');
+        info.className = 'st-lobby-menu-info';
+        info.textContent = [chat.fileName, tr('message_count', '{0} messages').replace('{0}', String(chat.count)), chat.size].filter(Boolean).join(' · ');
+
+        const buttons = document.createElement('div');
+        buttons.className = 'st-lobby-menu-buttons';
+        const renameButton = createFooterButton('fa-pen', tr('rename_title', 'Rename chat'), () => {
+            menuKey = '';
+            void renameChat(chat);
+        });
+        const deleteButton = createFooterButton('fa-trash-can', tr('delete', 'Delete'), () => {
+            if (open) {
+                // 막아 두되 누르면 이유를 알려 준다(휴대폰에서는 비활성 버튼의 설명을 볼 수 없다)
+                toastr.info(tr('delete_open', 'The chat that is open right now cannot be deleted.'));
+                return;
+            }
+            menuKey = '';
+            void deleteChat(chat);
+        });
+        deleteButton.classList.add('st-lobby-delete');
+        if (open) deleteButton.setAttribute('aria-disabled', 'true');
+        buttons.append(renameButton, deleteButton);
+
+        menu.append(info, buttons);
+        return menu;
     };
 
     // ── 동작 ──
@@ -819,7 +932,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             const oldKey = chat.key;
             const actual = await renameLobbyChat(chat, name);
             // 같은 채팅이 최근 채팅·고른 캐릭터의 채팅·대화 내용 검색 결과에 따로 들어 있을 수 있다. 모두 새 이름으로
-            const copies = [...(chats ?? []), ...(ownerChats ?? []), ...(content ? content.results.values() : [])]
+            const copies = [...(chats ?? []), ...(allChats ?? []), ...(ownerChats ?? []), ...(content ? content.results.values() : [])]
                 .filter(other => other.key === oldKey);
             for (const copy of new Set([chat, ...copies])) {
                 copy.fileName = actual;
@@ -857,7 +970,10 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
      * @param {LobbyChat} chat
      */
     const forgetChat = (chat) => {
+        // 최근 목록이 곧 전체일 때는 같은 배열을 쓰므로 함께 바꾼다
+        const sameList = allChats === chats;
         if (chats) chats = chats.filter(other => other.key !== chat.key);
+        if (allChats) allChats = sameList ? chats : allChats.filter(other => other.key !== chat.key);
         if (ownerChats) ownerChats = ownerChats.filter(other => other.key !== chat.key);
         content?.results.delete(chat.key);
         selected.delete(chat.key);
@@ -1016,6 +1132,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         if (managing) return;
         // 그사이 캐릭터가 추가·삭제됐을 수 있다
         fillOwnerOptions();
+        resetAll();
         void load(currentLimit());
         if (ownerFilter) void loadOwner();
     });

@@ -30,15 +30,14 @@ https://github.com/spaceship4415/st-chat-lobby
 - **Sort**: Recent / Oldest / Name / Most messages / By character.
   Recent and Oldest are grouped under Today, Yesterday, This week, This month and month headings.
 - **⟳ Refresh** reloads the list.
-- **Rename (✎)** refuses names that already exist (ignoring case). **Delete (🗑)** asks first and cannot be undone.
+- **⋮** opens a small menu under the row with the chat's details, **Rename** and **Delete**. Rename refuses names that already exist (ignoring case). Delete asks first and cannot be undone.
   The chat that is open right now cannot be deleted.
 - **Select mode (☑)**: pick chats or *Select all* (visible chats), then **Delete**.
 
 ### How many chats are loaded
 
-Loading every chat can be slow, so only the most recent ones are loaded at first (50 by default).
-Use **Load more** at the bottom for the rest. The title shows **(50+)** while more remain.
-Search, filters and sorting apply to the loaded chats; **Search all chats** loads everything and searches again.
+Loading every chat can be slow, so browsing shows only the most recent ones (50 by default); use **Load more** at the bottom for the rest.
+**Searching always covers every chat** (all chats are fetched once on the first search and reused), and so do the Oldest, Name and Most messages sorts. The title shows the total only when it is known.
 
 ## Settings
 
