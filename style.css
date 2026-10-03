@@ -402,6 +402,32 @@
     white-space: nowrap;
 }
 
+/* 캐릭터가 정해진 곳의 두 줄짜리: 2줄 = 메시지 수 + 미리보기 */
+.st-lobby-compact-row {
+    font-size: 0.85em;
+}
+
+/* 둘째 줄 앞의 페르소나는 줄이지 않는다(짧은 이름) — 대신 미리보기가 줄어든다 */
+.st-lobby-compact-row .st-lobby-persona {
+    flex-shrink: 0;
+    max-width: 40%;
+    font-size: inherit;
+}
+
+.st-lobby-compact-row .st-lobby-preview {
+    flex: 1;
+    min-width: 0;
+    font-size: inherit;
+}
+
+.st-lobby-item-compact .st-lobby-main {
+    padding-left: 12px;
+}
+
+.st-lobby-item-compact .st-lobby-check {
+    margin-right: 2px;
+}
+
 .st-lobby-count {
     flex-shrink: 0;
     font-size: 0.75em;

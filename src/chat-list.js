@@ -503,8 +503,10 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             if (section.title) list.append(createHeading(section, isCollapsed));
             // 접은 묶음은 줄을 아예 만들지 않는다(채팅이 많을 때 그리는 양도 준다)
             if (isCollapsed) continue;
+            // 캐릭터가 정해진 곳에서는 줄을 줄인다(캐릭터를 골랐거나 '캐릭터별' 묶음)
+            const compact = !!ownerFilter || section.key.startsWith('owner:');
             for (const chat of section.chats) {
-                list.append(createItem(chat));
+                list.append(createItem(chat, compact));
             }
         }
     };
@@ -761,8 +763,14 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         return button;
     };
 
-    /** @param {LobbyChat} chat */
-    const createItem = (chat) => {
+    /**
+     * 채팅 한 줄.
+     * compact: 캐릭터가 정해진 곳(캐릭터를 골랐을 때, '캐릭터별' 묶음 안)에서는 캐릭터 이름·아바타가 줄마다 반복되므로
+     * 빼고 두 줄로 줄인다 — 1줄: 채팅 이름(굵게)·페르소나·날짜, 2줄: 메시지 수·미리보기
+     * @param {LobbyChat} chat
+     * @param {boolean} [compact]
+     */
+    const createItem = (chat, compact = false) => {
         const open = isOpenChat(chat);
         const item = document.createElement('div');
         item.className = 'st-lobby-item';
@@ -788,7 +796,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             main.setAttribute('aria-pressed', String(checkbox.checked));
         }
 
-        main.append(createAvatar(chat));
+        if (!compact) main.append(createAvatar(chat));
 
         const body = document.createElement('div');
         body.className = 'st-lobby-body';
@@ -798,19 +806,22 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const owner = document.createElement('span');
         owner.className = 'st-lobby-owner';
         if (isPinned(chat, pinnedKeys)) owner.append(createIcon('fa-thumbtack st-lobby-pin-icon'), ' ');
-        if (chat.groupId) owner.append(createIcon('fa-users st-lobby-group-icon'), ' ');
+        if (chat.groupId && !compact) owner.append(createIcon('fa-users st-lobby-group-icon'), ' ');
         // 검색 중이면 찾은 글자를 표시한다
         const words = getWords();
-        owner.append(...highlightText(chat.ownerName, words));
+        owner.append(...highlightText(compact ? chat.fileName : chat.ownerName, words));
         top.append(owner);
         // 이 채팅에 고정된 페르소나(누구로 대화했는지). 캐릭터 이름 바로 옆에, 흐리게
+        // (두 줄짜리에서는 첫 줄의 긴 채팅 이름에 밀려 안 보이므로 둘째 줄 앞에 둔다)
         const personaName = getPersonaName(chat.persona);
+        /** @type {HTMLElement | null} */
+        let persona = null;
         if (personaName) {
-            const persona = document.createElement('span');
+            persona = document.createElement('span');
             persona.className = 'st-lobby-persona';
             persona.title = tr('persona_locked', 'Persona locked to this chat');
             persona.append(createIcon('fa-heart st-lobby-persona-icon'), ' ', personaName);
-            top.append(persona);
+            if (!compact) top.append(persona);
         }
         if (open) {
             const badge = document.createElement('span');
@@ -854,7 +865,15 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             preview.classList.add('st-lobby-preview-empty');
         }
 
-        body.append(top, nameRow, preview);
+        if (compact) {
+            // 채팅 이름은 이미 첫 줄에 있으므로 메시지 수와 미리보기를 한 줄에
+            nameRow.replaceChildren(...(persona ? [persona] : []), count, preview);
+            nameRow.classList.add('st-lobby-compact-row');
+            body.append(top, nameRow);
+            item.classList.add('st-lobby-item-compact');
+        } else {
+            body.append(top, nameRow, preview);
+        }
         main.append(body);
         main.title = `${chat.ownerName} – ${chat.fileName}`;
 
