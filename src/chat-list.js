@@ -2,6 +2,7 @@ import { getThumbnailUrl } from '../../../../../script.js';
 import { renderExtensionTemplateAsync } from '../../../../extensions.js';
 import { getGroupAvatar, groups } from '../../../../group-chats.js';
 import { Popup } from '../../../../popup.js';
+import { power_user } from '../../../../power-user.js';
 import { deleteLobbyChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
 import { EXTENSION_NAME, LOG_PREFIX, SORTS } from './constants.js';
 import { chatKey, getAllChats, getChatOwners, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
@@ -776,6 +777,15 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const words = getWords();
         owner.append(...highlightText(chat.ownerName, words));
         top.append(owner);
+        // 이 채팅에 고정된 페르소나(누구로 대화했는지). 캐릭터 이름 바로 옆에, 흐리게
+        const personaName = getPersonaName(chat.persona);
+        if (personaName) {
+            const persona = document.createElement('span');
+            persona.className = 'st-lobby-persona';
+            persona.title = tr('persona_locked', 'Persona locked to this chat');
+            persona.append(createIcon('fa-heart st-lobby-persona-icon'), ' ', personaName);
+            top.append(persona);
+        }
         if (open) {
             const badge = document.createElement('span');
             badge.className = 'st-lobby-badge';
@@ -1303,6 +1313,16 @@ function createCard({ icon, title, sub = '', onClick, action, progress, tone = '
         card.append(bar);
     }
     return card;
+}
+
+/**
+ * 페르소나 아바타 id → 이름. 삭제된 페르소나면 파일 이름(확장자 뺌)
+ * @param {string | undefined} avatarId
+ */
+function getPersonaName(avatarId) {
+    if (!avatarId) return '';
+    const name = power_user.personas?.[avatarId];
+    return typeof name === 'string' && name ? name : avatarId.replace(/\.[^.]+$/, '');
 }
 
 /** @param {string} text */

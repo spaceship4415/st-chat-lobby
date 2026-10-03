@@ -275,12 +275,29 @@
 }
 
 .st-lobby-owner {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     font-weight: bold;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 캐릭터 이름 바로 옆의 고정 페르소나. 좁으면 이쪽이 먼저 줄어든다 */
+.st-lobby-persona {
+    flex: 0 2 auto;
+    min-width: 0;
+    max-width: 45%;
+    overflow: hidden;
+    font-size: 0.8em;
+    opacity: 0.65;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-lobby-persona-icon {
+    color: #f48fb1;
+    font-size: 0.85em;
 }
 
 .st-lobby-pin-icon {
@@ -300,6 +317,8 @@
 
 .st-lobby-date {
     flex-shrink: 0;
+    /* 이름·페르소나가 짧아도 날짜는 오른쪽 끝에 */
+    margin-left: auto;
     font-size: 0.8em;
     opacity: 0.7;
 }

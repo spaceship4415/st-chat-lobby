@@ -28,6 +28,7 @@
     "chat_lobby.all_loading_sort": "정렬하려고 모든 채팅을 불러오는 중…",
     "chat_lobby.all_failed": "모든 채팅을 불러오지 못해 최근 채팅만 보여 줍니다.",
     "chat_lobby.more_actions": "더 보기",
+    "chat_lobby.persona_locked": "이 채팅에 고정된 페르소나",
     "chat_lobby.rename_short": "이름 바꾸기",
     "chat_lobby.pin": "고정",
     "chat_lobby.unpin": "고정 해제",

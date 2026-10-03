@@ -21,6 +21,7 @@ https://github.com/spaceship4415/st-chat-lobby
 ## Using the list
 
 - **Tap a chat** to open it.
+- **♥ Name** next to the character is the persona locked to that chat (who you chatted as). Chats without a locked persona show nothing.
 - **Search** looks in character/group names, chat names and the **last message** only (not earlier messages). Several words must all match.
   Results are grouped by where they matched (character/group name, chat name, last message) and the matched text is highlighted.
 - **Collapse groups**: tap a heading (date, character or match place) to collapse or expand it. Headings stick to the top while scrolling. *Select all* skips collapsed groups.

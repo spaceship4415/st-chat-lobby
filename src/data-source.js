@@ -17,6 +17,7 @@ import { toPlainPreview } from './utils.js';
  * @property {string} preview 마지막 메시지 평문
  * @property {number} count 메시지 수
  * @property {string} size 파일 크기(사람이 읽는 형식)
+ * @property {string} [persona] 이 채팅에 고정된 페르소나(아바타 id). 없거나 모르면 ''
  * @property {boolean} [contentMatch] 대화 내용 검색(서버)에서 찾은 채팅
  * @property {string} [snippet] 대화 내용 검색에서 찾은 메시지(평문). 아직 모르면 없음
  */
@@ -34,6 +35,16 @@ export function chatKey(chat) {
 }
 
 /**
+ * 채팅 정보(첫 줄)의 고정 페르소나
+ * @param {any} item 서버 응답 한 줄(metadata: true 일 때 chat_metadata 가 있다)
+ * @returns {string}
+ */
+function getChatPersona(item) {
+    const persona = item?.chat_metadata?.persona;
+    return typeof persona === 'string' ? persona : '';
+}
+
+/**
  * 모든 캐릭터·그룹의 채팅을 최근 순으로 가져온다.
  *
  * ST 첫 화면의 '최근 채팅'과 같은 서버 API 를 쓴다. 서버는 채팅 파일을 수정 시각 순으로 늘어놓은 뒤
@@ -46,7 +57,8 @@ export function chatKey(chat) {
 export async function getAllChats(limit) {
     // 고정한 채팅은 서버가 개수 제한과 상관없이 맨 앞에 더 넣어 준다(오래된 채팅도 '고정' 묶음에 보이도록)
     const pinned = getPinnedEntries();
-    const body = limit > 0 ? { max: limit + 1, pinned } : { pinned };
+    // metadata: 채팅 정보(첫 줄)도 받는다. 고정 페르소나를 보여 주려고 — 첫 줄만 읽어서 비용은 거의 없다
+    const body = limit > 0 ? { max: limit + 1, pinned, metadata: true } : { pinned, metadata: true };
     const response = await fetch('/api/chats/recent', {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -87,6 +99,7 @@ export async function getAllChats(limit) {
             preview: Number(item.chat_items) > 0 && typeof item.mes === 'string' ? toPlainPreview(item.mes) : '',
             count: Number(item.chat_items) || 0,
             size: typeof item.file_size === 'string' ? item.file_size : '',
+            persona: getChatPersona(item),
         };
         chat.key = chatKey(chat);
         chats.push(chat);
@@ -149,7 +162,7 @@ export async function getOwnerChats(owner) {
     const response = await fetch(owner.groupId ? '/api/chats/search' : '/api/characters/chats', {
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify(owner.groupId ? { query: '', group_id: owner.groupId } : { avatar_url: owner.avatar }),
+        body: JSON.stringify(owner.groupId ? { query: '', group_id: owner.groupId } : { avatar_url: owner.avatar, metadata: true }),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
@@ -173,6 +186,8 @@ export async function getOwnerChats(owner) {
                 preview: count > 0 && typeof lastMessage === 'string' ? toPlainPreview(lastMessage) : '',
                 count,
                 size: typeof item.file_size === 'string' ? item.file_size : '',
+                // 그룹은 검색 API 를 써서 채팅 정보를 받을 수 없다
+                persona: getChatPersona(item),
             };
             chat.key = chatKey(chat);
             return chat;
