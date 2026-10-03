@@ -22,6 +22,7 @@ https://github.com/spaceship4415/st-chat-lobby
 
 - **Tap a chat** to open it.
 - **Search** looks in character/group names, chat names and the **last message** only (not earlier messages). Several words must all match.
+  Results are grouped by where they matched (character/group name, chat name, last message) and the matched text is highlighted.
   If the Show filter hides matches, the list says how many and offers **Show all**. The Show filter is not remembered; Sort is.
 - **Show**: All / Characters / Groups. **Sort**: Recent / Oldest / Name / Most messages / By character.
   Recent and Oldest are grouped under Today, Yesterday, This week, This month and month headings.
