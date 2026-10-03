@@ -8,6 +8,7 @@
 
     "chat_lobby.title": "전체 채팅",
     "chat_lobby.search_placeholder": "이름·마지막 메시지 검색",
+    "chat_lobby.search_clear": "검색어 지우기",
     "chat_lobby.filter_button": "필터",
     "chat_lobby.select_button": "선택",
     "chat_lobby.filter_clear": "필터 지우기",

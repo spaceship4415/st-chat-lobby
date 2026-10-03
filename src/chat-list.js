@@ -57,6 +57,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     const find = (/** @type {string} */ selector) => /** @type {HTMLElement} */ (root.querySelector(selector));
     const searchInput = /** @type {HTMLInputElement} */ (find('.st-lobby-search'));
+    const searchClear = find('.st-lobby-search-clear');
     const ownerSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-owner-select'));
     const sortSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-sort'));
     const selectToggle = find('.st-lobby-select-toggle');
@@ -864,6 +865,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         count.title = tr('message_count', '{0} messages').replace('{0}', String(chat.count));
         count.append(createIcon('fa-comment'), ` ${chat.count}`);
         nameRow.append(name, count);
+        // 좁으면(휴대폰·창) 첫 줄에 캐릭터 이름·페르소나·날짜가 다 안 들어가 둘 중 하나가 '…'가 된다.
+        // 그때는 CSS(컨테이너 쿼리)가 첫 줄 것을 숨기고 둘째 줄 채팅 이름 앞의 이것을 보여 준다
+        if (persona && !compact) nameRow.prepend(persona.cloneNode(true));
 
         const preview = document.createElement('div');
         preview.className = 'st-lobby-preview';
@@ -959,6 +963,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const toggleMenu = (key) => {
         menuKey = menuKey === key ? '' : key;
         renderList();
+        // 화면 아래쪽 줄의 메뉴는 화면 밖(휴대폰 입력창 뒤)으로 펼쳐지므로 보이게 올린다
+        if (menuKey) list.querySelector('.st-lobby-menu')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
 
     /**
@@ -1220,6 +1226,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     let searchTimer = 0;
     searchInput.addEventListener('input', () => {
+        searchClear.hidden = !searchInput.value;
         // 글자마다 다시 그리지 않도록 잠깐 기다린다(휴대폰에서 목록이 길 때)
         clearTimeout(searchTimer);
         searchTimer = window.setTimeout(() => {
@@ -1234,6 +1241,11 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         event.preventDefault();
         event.stopPropagation();
         searchInput.blur();
+    });
+    // 지우기만 하고 키보드는 띄우지 않는다(지운 뒤 목록을 보려는 경우가 많다)
+    searchClear.addEventListener('click', () => {
+        searchInput.value = '';
+        searchInput.dispatchEvent(new Event('input'));
     });
     ownerSelect.addEventListener('change', () => {
         if (managing) {

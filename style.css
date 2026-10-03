@@ -39,13 +39,46 @@
     gap: 6px;
 }
 
+.st-lobby-search-box {
+    position: relative;
+    flex: 1;
+    display: flex;
+    min-width: 0;
+}
+
 .st-lobby-search {
     flex: 1;
     min-width: 0;
     min-height: 44px;
     margin: 0;
+    /* 오른쪽 지우기 버튼 자리 */
+    padding-right: 40px;
     /* iOS 포커스 확대 방지 */
     font-size: 16px;
+}
+
+/* 브라우저 기본 ✕ 대신 아래 버튼을 쓴다 */
+.st-lobby-search::-webkit-search-cancel-button {
+    display: none;
+}
+
+.st-lobby-search-clear {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 40px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+.st-lobby-search-clear[hidden] {
+    display: none;
 }
 
 .st-lobby-owner-select,
@@ -134,8 +167,11 @@
     cursor: pointer;
 }
 
-/* 선택 모드 막대 */
+/* 선택 모드 막대. 목록을 내려도 위에 붙어 있어서 아래쪽 채팅을 고른 뒤 바로 삭제할 수 있다 */
 .st-lobby-select-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -143,7 +179,14 @@
     padding: 6px 8px;
     border: 1px solid var(--SmartThemeQuoteColor);
     border-radius: 10px;
-    background-color: var(--black30a);
+    /* 아래로 지나가는 목록이 비치지 않게 */
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+}
+
+/* 선택 중에는 막대가 위를 차지하므로 묶음 제목은 붙지 않는다 */
+.st-lobby-selecting .st-lobby-heading {
+    position: static;
 }
 
 .st-lobby-select-bar[hidden] {
@@ -339,6 +382,8 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
+    /* 폭에 따라 페르소나 자리를 바꾼다(아래 @container) */
+    container-type: inline-size;
 }
 
 .st-lobby-top {
@@ -356,16 +401,33 @@
     white-space: nowrap;
 }
 
-/* 캐릭터 이름 바로 옆의 고정 페르소나. 좁으면 이쪽이 먼저 줄어든다 */
+/* 캐릭터 이름 바로 옆의 고정 페르소나. 너무 길 때만 40%에서 자른다.
+   좁으면 첫 줄에 이름과 같이 못 들어가므로(둘 중 하나가 'Sa…'·'♥ 김…') 둘째 줄 채팅 이름 앞으로 옮긴다 */
 .st-lobby-persona {
-    flex: 0 2 auto;
+    flex: 0 0 auto;
     min-width: 0;
-    max-width: 45%;
+    max-width: 40%;
     overflow: hidden;
     font-size: 0.8em;
     opacity: 0.65;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.st-lobby-name-row:not(.st-lobby-compact-row) > .st-lobby-persona {
+    display: none;
+}
+
+@container (max-width: 360px) {
+    .st-lobby-top > .st-lobby-persona {
+        display: none;
+    }
+
+    /* 채팅 이름(대개 '캐릭터 - 날짜…'라 뒤가 잘려도 괜찮다) 대신 페르소나는 줄이지 않는다 */
+    .st-lobby-name-row:not(.st-lobby-compact-row) > .st-lobby-persona {
+        display: inline;
+        font-size: 0.85em;
+    }
 }
 
 .st-lobby-persona-icon {
@@ -420,8 +482,6 @@
 
 /* 둘째 줄 앞의 페르소나는 줄이지 않는다(짧은 이름) — 대신 미리보기가 줄어든다 */
 .st-lobby-compact-row .st-lobby-persona {
-    flex-shrink: 0;
-    max-width: 40%;
     font-size: inherit;
 }
 
@@ -678,7 +738,8 @@ button.st-lobby-card:focus-visible {
 
 /* 일괄 삭제 중에는 목록을 누르지 못하게 */
 .st-lobby-busy .st-lobby-list,
-.st-lobby-busy .st-lobby-tools {
+.st-lobby-busy .st-lobby-tools,
+.st-lobby-busy .st-lobby-select-bar {
     pointer-events: none;
     opacity: 0.6;
 }
@@ -713,6 +774,18 @@ button.st-lobby-card:focus-visible {
     font-size: max(16px, 1em);
     overflow-wrap: anywhere;
     resize: none;
+}
+
+/* 휴대폰에서는 창 바깥 여백·안쪽 여백을 줄여 목록 폭을 넓힌다(기본은 양쪽 합쳐 약 100px이 빈다) */
+@media (max-width: 767px) {
+    .popup.st-lobby-popup {
+        max-width: calc(100dvw - 12px) !important;
+        padding: 4px 6px;
+    }
+
+    .st-lobby-popup .popup-content {
+        padding: 0 2px;
+    }
 }
 
 .st-lobby-popup .popup-controls {

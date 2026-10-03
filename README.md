@@ -21,7 +21,7 @@ https://github.com/spaceship4415/st-chat-lobby
 ## Using the list
 
 - **Tap a chat** to open it.
-- **♥ Name** next to the character is the persona locked to that chat (who you chatted as). Chats without a locked persona show nothing.
+- **♥ Name** next to the character is the persona locked to that chat (who you chatted as). Chats without a locked persona show nothing. On narrow screens it moves to the start of the second line so it isn't cut off.
 - **Search** looks in character/group names, chat names and the **last message** only (not earlier messages). Several words must all match.
   Results are grouped by where they matched (character/group name, chat name, last message) and the matched text is highlighted.
 - **Collapse groups**: tap a heading (date, character or match place) to collapse or expand it. Headings stick to the top while scrolling. *Select all* skips collapsed groups.
@@ -35,7 +35,7 @@ https://github.com/spaceship4415/st-chat-lobby
 - With a character picked, and inside 'By character' groups, rows drop the repeated character name and avatar and use two lines.
 - **⋮** opens a small menu under the row with the chat's details, **Rename**, **Pin/Unpin** and **Delete**. Pinned chats are gathered in a **📌 Pinned** group at the top while browsing, even if they are older than the loaded chats. Rename refuses names that already exist (ignoring case). Delete asks first and cannot be undone.
   The chat that is open right now cannot be deleted.
-- **Select**: pick chats or *Select all* (visible chats), then **Delete**.
+- **Select**: pick chats or *Select all* (visible chats), then **Delete**. The select bar sticks to the top while scrolling.
 
 ### How many chats are loaded
 
