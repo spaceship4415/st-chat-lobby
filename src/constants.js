@@ -26,7 +26,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
     replaceWelcome: true,
     // 한 번에 불러올 채팅 수(LOAD_COUNTS). 서버는 이 개수만큼만 채팅 파일을 읽는다
     loadCount: 50,
-    // 마지막으로 고른 정렬·필터를 기억한다
+    // 마지막으로 고른 정렬을 기억한다(보기 필터는 기억하지 않는다)
     sort: 'recent',
-    filter: 'all',
 });

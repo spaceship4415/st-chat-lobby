@@ -323,6 +323,13 @@
     min-height: 44px;
     margin: 0;
     justify-content: center;
+    white-space: nowrap;
+}
+
+/* 목록 안의 안내 버튼(보기 필터 풀기)은 가운데에 글자 폭만큼 */
+.st-lobby-list > .st-lobby-footer-button {
+    align-self: center;
+    padding: 0 16px;
 }
 
 .st-lobby-footer-hint {

@@ -1,6 +1,6 @@
 import { saveSettingsDebounced } from '../../../../../script.js';
 import { extension_settings } from '../../../../extensions.js';
-import { DEFAULT_SETTINGS, FILTERS, LOAD_COUNTS, MODULE_NAME, SORTS } from './constants.js';
+import { DEFAULT_SETTINGS, LOAD_COUNTS, MODULE_NAME, SORTS } from './constants.js';
 
 /**
  * 저장된 설정을 읽어 빠진 값을 기본값으로 채운다.
@@ -17,7 +17,8 @@ export function loadSettings() {
     }
     if (!LOAD_COUNTS.includes(settings.loadCount)) settings.loadCount = DEFAULT_SETTINGS.loadCount;
     if (!SORTS.includes(settings.sort)) settings.sort = DEFAULT_SETTINGS.sort;
-    if (!FILTERS.includes(settings.filter)) settings.filter = DEFAULT_SETTINGS.filter;
+    // 0.1.0 이 저장하던 보기 필터. 다시 열 때 걸러진 채로 남아 검색이 안 되는 것처럼 보여서 기억하지 않게 했다
+    delete settings.filter;
 
     extension_settings[MODULE_NAME] = settings;
     return settings;

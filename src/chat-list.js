@@ -61,8 +61,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     /** 늦게 도착한 응답을 버리기 위한 번호 */
     let loadToken = 0;
     let query = '';
+    // 보기(캐릭터/그룹)는 기억하지 않는다. 다음에 열었을 때 걸러진 채로 남아 있으면 검색이 안 되는 것처럼 보인다
     /** @type {LobbyFilter} */
-    let filter = /** @type {LobbyFilter} */ (getSettings().filter);
+    let filter = 'all';
     /** @type {LobbySort} */
     let sort = /** @type {LobbySort} */ (getSettings().sort);
     let selecting = false;
@@ -112,15 +113,23 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     // ── 보이는 목록 ──
     /** @param {LobbyChat} chat */
-    const matches = (chat) => {
-        if (filter === 'character' && chat.groupId) return false;
-        if (filter === 'group' && !chat.groupId) return false;
+    const matchesFilter = (chat) => {
+        if (filter === 'character') return !chat.groupId;
+        if (filter === 'group') return !!chat.groupId;
+        return true;
+    };
+
+    /** @param {LobbyChat} chat */
+    const matchesQuery = (chat) => {
         const needle = query.trim().toLocaleLowerCase();
         if (!needle) return true;
         // 여러 낱말이면 모두 들어 있어야 한다(어느 칸에 있든)
         const haystack = `${chat.ownerName}\n${chat.fileName}\n${chat.preview}`.toLocaleLowerCase();
         return needle.split(/\s+/).every(word => haystack.includes(word));
     };
+
+    /** @param {LobbyChat} chat */
+    const matches = chat => matchesFilter(chat) && matchesQuery(chat);
 
     /**
      * @returns {{ title: string, chats: LobbyChat[] }[]} 제목별 묶음. 제목이 빈 문자열이면 제목 없이 보인다
@@ -190,6 +199,20 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         const sections = getSections();
         if (sections.length === 0) {
+            // 보기(캐릭터/그룹) 때문에 숨은 결과가 있으면 '없음'이 아니라 그렇다고 알려 주고 바로 풀 수 있게 한다
+            const hiddenByFilter = filter !== 'all' ? chats.filter(matchesQuery).length : 0;
+            if (hiddenByFilter) {
+                const kind = filter === 'group' ? tr('filter_group_noun', 'group chats') : tr('filter_character_noun', 'character chats');
+                list.append(
+                    createMessage(tr('filter_hidden', 'No {0} here. {1} found in other chats.').replace('{0}', kind).replace('{1}', String(hiddenByFilter))),
+                    createFooterButton('fa-filter-circle-xmark', tr('show_all', 'Show all'), () => {
+                        filter = 'all';
+                        filterSelect.value = 'all';
+                        renderAll();
+                    }),
+                );
+                return;
+            }
             list.append(createMessage(query.trim()
                 ? tr('search_empty', 'No chats match your search.')
                 : tr('filter_empty', 'No chats to show.')));
@@ -593,7 +616,6 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     });
     filterSelect.addEventListener('change', () => {
         filter = /** @type {LobbyFilter} */ (filterSelect.value);
-        if (getSettings().filter !== filter) setSetting('filter', filter);
         renderAll();
     });
     sortSelect.addEventListener('change', () => {
