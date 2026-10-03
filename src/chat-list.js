@@ -145,6 +145,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         } finally {
             if (token === loadToken) {
                 loading = false;
+                fillOwnerOptions();
                 renderAll();
             }
         }
@@ -158,8 +159,11 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     };
 
     // ── 캐릭터 고르기 ──
+    /** 캐릭터 고르기 선택지를 지금 아는 채팅으로 다시 채운다(전체 채팅을 받으면 채팅 수가 붙는다) */
     const fillOwnerOptions = () => {
-        const options = getOwnerOptions();
+        // 최근 목록이 이미 전부면(남은 채팅 없음) 그것으로도 채팅 수를 셀 수 있다
+        const all = allChats ?? (chats && !hasMore ? chats : null);
+        const options = getOwnerOptions({ known: [...(chats ?? []), ...(allChats ?? [])], all, keep: ownerFilter });
         ownerSelect.replaceChildren(
             new Option(tr('owner_all', 'All characters'), ''),
             ...options.map(owner => new Option(owner.label, owner.key)),
@@ -172,7 +176,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     /** 고른 캐릭터의 채팅을 전부 불러온다(그 캐릭터 채팅 파일만 읽어서 가볍다) */
     const loadOwner = async () => {
         const token = ++ownerToken;
-        const owner = getOwnerOptions().find(option => option.key === ownerFilter);
+        const owner = getOwnerOptions({ keep: ownerFilter }).find(option => option.key === ownerFilter);
         if (!owner) return;
         ownerChats = null;
         ownerFailed = false;
@@ -233,6 +237,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             .finally(() => {
                 if (token !== allToken) return;
                 allLoading = false;
+                // 전체를 알게 됐으니 캐릭터 고르기에 채팅 수를 붙인다
+                fillOwnerOptions();
                 renderAll();
             });
     };

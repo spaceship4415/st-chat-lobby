@@ -1,6 +1,7 @@
 import { characters, getRequestHeaders } from '../../../../../script.js';
 import { groups } from '../../../../group-chats.js';
 import { timestampToMoment } from '../../../../utils.js';
+import { tr } from './i18n.js';
 import { getPinnedEntries, getPinnedKeys, isPinned } from './pins.js';
 import { toPlainPreview } from './utils.js';
 
@@ -129,26 +130,74 @@ export function ownerKey(owner) {
 }
 
 /**
- * 캐릭터 고르기 칸의 선택지: 모든 캐릭터와 그룹(채팅이 없어도), 이름 순.
+ * 캐릭터 고르기 칸의 선택지: **채팅이 있는** 캐릭터와 그룹, 최근에 대화한 순.
  * 같은 이름이 여럿이면(카드 복사 등) 아바타 파일 이름을 붙여 구분한다.
- * @returns {(ChatOwner & { key: string, label: string })[]}
+ *
+ * 채팅이 있는지·마지막 대화 시각은 ST 가 캐릭터마다 이미 갖고 있는 값(chat_size, date_last_chat)을 쓴다 — 서버에 따로 묻지 않는다.
+ * 다만 이 값은 페이지를 열 때 계산된 것이라, 그 뒤에 처음 대화한 캐릭터는 불러온 채팅으로 보충한다.
+ * 채팅 수는 그룹은 그룹 정보로 바로, 캐릭터는 전체 채팅을 받아 둔 경우(검색을 한 번 하면)에만 붙인다.
+ * @param {object} [options]
+ * @param {LobbyChat[]} [options.known] 지금 알고 있는 채팅(최근 목록 등) — 있는지·마지막 시각 보충용
+ * @param {LobbyChat[] | null} [options.all] 전체 채팅(받아 두었으면) — 캐릭터 채팅 수용
+ * @param {string} [options.keep] 채팅이 없어도 남길 선택지(지금 고른 캐릭터)
+ * @returns {(ChatOwner & { key: string, label: string, lastTime: number })[]}
  */
-export function getOwnerOptions() {
+export function getOwnerOptions({ known = [], all = null, keep = '' } = {}) {
+    /** @type {Map<string, number>} 불러온 채팅으로 본 주인별 마지막 대화 시각 */
+    const knownLast = new Map();
+    for (const chat of known) {
+        const key = ownerKey(chat);
+        knownLast.set(key, Math.max(knownLast.get(key) ?? 0, chat.lastTime));
+    }
+    /** @type {Map<string, number> | null} */
+    let counts = null;
+    if (all) {
+        counts = new Map();
+        for (const chat of all) counts.set(ownerKey(chat), (counts.get(ownerKey(chat)) ?? 0) + 1);
+    }
+
     const owners = [
-        ...characters.map(c => ({ avatar: String(c.avatar ?? ''), groupId: '', name: String(c.name ?? '') })).filter(o => o.avatar),
-        ...groups.map(g => ({ avatar: '', groupId: String(g.id), name: String(g.name ?? '') })),
-    ];
+        ...characters
+            .filter(c => c.avatar)
+            .map(c => {
+                const owner = { avatar: String(c.avatar), groupId: '', name: String(c.name ?? '') };
+                const key = ownerKey(owner);
+                return {
+                    ...owner,
+                    key,
+                    hasChats: Number(c.chat_size) > 0 || knownLast.has(key),
+                    lastTime: Math.max(Number(c.date_last_chat) || 0, knownLast.get(key) ?? 0),
+                    count: counts ? (counts.get(key) ?? 0) : null,
+                };
+            }),
+        ...groups.map(g => {
+            const owner = { avatar: '', groupId: String(g.id), name: String(g.name ?? '') };
+            const key = ownerKey(owner);
+            const chatCount = Array.isArray(g.chats) ? g.chats.length : 0;
+            return {
+                ...owner,
+                key,
+                hasChats: chatCount > 0,
+                lastTime: Math.max(Number(g.date_last_chat) || 0, knownLast.get(key) ?? 0),
+                count: chatCount,
+            };
+        }),
+    ].filter(owner => owner.hasChats || owner.key === keep);
+
     const nameCount = new Map();
     for (const owner of owners) nameCount.set(owner.name, (nameCount.get(owner.name) ?? 0) + 1);
     return owners
         .map(owner => {
             let label = owner.name;
-            if (nameCount.get(owner.name) > 1 && owner.avatar) label += ` (${owner.avatar.replace(/\.png$/i, '')})`;
+            // 이름에 괄호가 들어 있을 수 있어서 구분 표시는 대괄호, 채팅 수는 ' · N개'로 붙인다(네이티브 select 라 오른쪽 정렬은 못 한다)
+            if (nameCount.get(owner.name) > 1 && owner.avatar) label += ` [${owner.avatar.replace(/\.png$/i, '')}]`;
             // 그룹은 이름 앞에 표시(네이티브 select 라 아이콘을 넣을 수 없다)
             if (owner.groupId) label = `👥 ${label}`;
-            return { ...owner, key: ownerKey(owner), label };
+            if (owner.count !== null) label += ` · ${tr('owner_count', '{0} chats').replace('{0}', String(owner.count))}`;
+            return { avatar: owner.avatar, groupId: owner.groupId, name: owner.name, key: owner.key, label, lastTime: owner.lastTime };
         })
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) || a.label.localeCompare(b.label));
+        // 최근에 대화한 순
+        .sort((a, b) => b.lastTime - a.lastTime || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
 /**

@@ -43,6 +43,7 @@
     "chat_lobby.filter_empty": "보여 줄 채팅이 없습니다.",
     "chat_lobby.owner_select": "캐릭터",
     "chat_lobby.owner_all": "모든 캐릭터",
+    "chat_lobby.owner_count": "{0}개",
     "chat_lobby.owner_loading": "이 캐릭터의 채팅을 불러오는 중…",
     "chat_lobby.owner_load_failed": "이 캐릭터의 채팅을 불러오지 못했습니다.",
     "chat_lobby.owner_empty": "이 캐릭터는 아직 채팅이 없습니다.",
