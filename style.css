@@ -167,14 +167,25 @@
 .st-lobby-selected-count {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
     font-size: 0.9em;
     opacity: 0.8;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
+/* 버튼은 줄어들지 않게(개수 글자가 남은 자리를 다 차지해 버튼 글자가 두 줄로 접혔다) */
 .st-lobby-delete-selected,
 .st-lobby-select-done {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     min-height: 44px;
     margin: 0;
+    padding: 0 12px;
+    white-space: nowrap;
 }
 
 .st-lobby-delete-selected:not(:disabled) {
