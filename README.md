@@ -27,13 +27,15 @@ https://github.com/spaceship4415/st-chat-lobby
 - **Collapse groups**: tap a heading (date, character or match place) to collapse or expand it. Headings stick to the top while scrolling. *Select all* skips collapsed groups.
 - **Search conversations too**: a separate card at the top of the search results. It searches every message of every chat (all characters and groups) and lists matches under **Conversation**, previewing the matched message.
   It reads whole chat files, so it can be slow; progress is shown and you can **Stop** anytime. Changing the search text discards the results.
-- **Character picker**: pick a character or group (👥) to see **all of its chats**, regardless of how many are loaded. Search and conversation search then stay within it; if nothing matches, **Search all characters** widens it. The picker resets each time; Sort is remembered.
+- **Filter**: the **Filter** button next to search opens the character picker, sort and refresh (remembered open/closed). When closed with non-default choices, a one-line summary appears under search with **✕** to reset, and the button shows a dot.
+- **Character picker**: lists only characters and groups (👥) that have chats, most recently chatted first, with chat counts when known. Pick one to see **all of its chats**, regardless of how many are loaded. Search and conversation search then stay within it; if nothing matches, **Search all characters** widens it. The picker resets each time; Sort is remembered.
 - **Sort**: Recent / Oldest / Name / Most messages / By character.
   Recent and Oldest are grouped under Today, Yesterday, This week, This month and month headings.
-- **⟳ Refresh** reloads the list.
+- **Refresh** (inside Filter) reloads the list.
+- With a character picked, and inside 'By character' groups, rows drop the repeated character name and avatar and use two lines.
 - **⋮** opens a small menu under the row with the chat's details, **Rename**, **Pin/Unpin** and **Delete**. Pinned chats are gathered in a **📌 Pinned** group at the top while browsing, even if they are older than the loaded chats. Rename refuses names that already exist (ignoring case). Delete asks first and cannot be undone.
   The chat that is open right now cannot be deleted.
-- **Select mode (☑)**: pick chats or *Select all* (visible chats), then **Delete**.
+- **Select**: pick chats or *Select all* (visible chats), then **Delete**.
 
 ### How many chats are loaded
 

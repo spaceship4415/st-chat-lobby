@@ -111,17 +111,6 @@ export async function getAllChats(limit) {
 }
 
 /**
- * 대화 내용 검색 대상(모든 캐릭터와 그룹)
- * @returns {ChatOwner[]}
- */
-export function getChatOwners() {
-    return [
-        ...characters.map(c => ({ avatar: String(c.avatar ?? ''), groupId: '', name: String(c.name ?? '') })).filter(o => o.avatar),
-        ...groups.filter(g => Array.isArray(g.chats) && g.chats.length).map(g => ({ avatar: '', groupId: String(g.id), name: String(g.name ?? '') })),
-    ];
-}
-
-/**
  * 캐릭터·그룹을 가리키는 키('c:아바타' / 'g:그룹id'). 캐릭터 고르기 칸의 값
  * @param {{ avatar: string, groupId: string }} owner
  */

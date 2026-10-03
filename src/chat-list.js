@@ -5,7 +5,7 @@ import { Popup } from '../../../../popup.js';
 import { power_user } from '../../../../power-user.js';
 import { deleteLobbyChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
 import { EXTENSION_NAME, LOG_PREFIX, SORTS } from './constants.js';
-import { chatKey, getAllChats, getChatOwners, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
+import { chatKey, getAllChats, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
 import { tr } from './i18n.js';
 import { askName } from './name-prompt.js';
 import { getPinnedKeys, isPinned, setPinned } from './pins.js';
@@ -24,6 +24,7 @@ import { formatMonth, formatShortDate, getDateBucket, hasName, highlightText, sa
  * @property {number} completed 검색을 마친 캐릭터·그룹 수 (snippet 단계에서는 찾은 메시지를 불러온 수)
  * @property {number} total
  * @property {number} failed 읽지 못한 캐릭터·그룹 수
+ * @property {boolean} hasGroups 검색 대상에 그룹이 있는지(진행 문구를 '캐릭터'·'캐릭터·그룹'으로 고른다)
  * @property {Map<string, LobbyChat>} results key → 찾은 채팅
  * @property {AbortController} controller
  */
@@ -595,10 +596,20 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             const step = state.phase === 'search'
                 ? tr('content_searching', 'Searching conversations…')
                 : tr('content_snippets', 'Loading matched messages…');
+            // '3 / 5'만 있으면 채팅 수로 읽기 쉬워서 단위를 글자로 쓴다. 한 곳만 찾을 때(캐릭터를 골랐을 때)는 막대만
+            let progressText = '';
+            if (state.total > 1) {
+                const template = state.phase === 'snippet'
+                    ? tr('content_progress_snippet', '{0} of {1} chats loaded')
+                    : state.hasGroups
+                        ? tr('content_progress_places', '{0} of {1} characters/groups checked')
+                        : tr('content_progress_characters', '{0} of {1} characters checked');
+                progressText = template.replace('{0}', String(state.completed)).replace('{1}', String(state.total));
+            }
             return createCard({
                 icon: 'fa-spinner fa-spin',
                 title: step,
-                sub: `${state.completed} / ${state.total} · ${foundText}`,
+                sub: [foundText, progressText].filter(Boolean).join(' · '),
                 progress: state.total ? state.completed / state.total : 0,
                 action: { label: tr('content_stop', 'Stop'), onClick: () => stopContentSearch() },
                 tone: 'running',
@@ -648,8 +659,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         if (!words.length) return;
         if (content) content.controller.abort();
 
-        // 캐릭터를 골랐으면 그 캐릭터만 검색한다(훨씬 빠르다)
-        const owners = getChatOwners().filter(owner => !ownerFilter || ownerKey(owner) === ownerFilter);
+        // 채팅이 있는 캐릭터·그룹만(캐릭터 고르기와 같은 목록). 캐릭터를 골랐으면 그 캐릭터만 — 훨씬 빠르다
+        const owners = getOwnerOptions({ known: [...(chats ?? []), ...(allChats ?? [])], keep: ownerFilter })
+            .filter(owner => !ownerFilter || owner.key === ownerFilter);
         /** @type {ContentSearch} */
         const state = {
             query: query.trim(),
@@ -657,6 +669,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             phase: 'search',
             completed: 0,
             total: owners.length,
+            hasGroups: owners.some(owner => !!owner.groupId),
             failed: 0,
             results: new Map(),
             controller: new AbortController(),
