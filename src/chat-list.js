@@ -301,8 +301,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             return;
         }
 
-        // 대화 내용 검색 진행·결과 카드
-        if (query.trim() && contentFor()) list.append(createContentCard());
+        // 대화 내용 검색 카드(시작 버튼 → 진행 → 결과)는 검색 결과 맨 위에 둔다.
+        // 맨 아래에 두면 휴대폰에서 결과를 끝까지 내려야 보여서 있는지도 모르고, 진행 상황도 안 보인다
+        if (query.trim()) list.append(createContentCard());
 
         const sections = getSections();
         if (sections.length === 0) {
@@ -401,8 +402,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                 onClick: () => void load(0),
             }));
         }
-        // 시작 버튼만 아래에 둔다. 진행·결과 카드는 목록 맨 위(renderList) — 결과가 계속 붙어 내려가도 휴대폰에서 보이도록
-        if (!contentFor()) footer.append(createContentCard());
+        // 대화 내용 검색 카드는 목록 맨 위(renderList)에 있다
     };
 
     /** 대화 내용 검색 카드: 시작 버튼 → 진행(막대·멈추기) → 결과 요약 */
