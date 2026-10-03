@@ -60,6 +60,11 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const sortSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-sort'));
     const selectToggle = find('.st-lobby-select-toggle');
     const reloadButton = find('.st-lobby-reload');
+    const filterToggle = find('.st-lobby-filter-toggle');
+    const filterPanel = find('.st-lobby-filter-panel');
+    const filterSummary = find('.st-lobby-filter-summary');
+    const filterSummaryText = find('.st-lobby-filter-summary-text');
+    const filterClear = find('.st-lobby-filter-clear');
     const selectBar = find('.st-lobby-select-bar');
     const selectAllInput = /** @type {HTMLInputElement} */ (find('.st-lobby-select-all input'));
     const selectedCount = find('.st-lobby-selected-count');
@@ -419,9 +424,30 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         renderFooter();
         renderNote();
         renderSelectBar();
+        renderFilterBar();
         // 전체 개수를 알 때만 보여 준다('50+' 같은 표시는 뜻이 모호하다)
         const total = allChats?.length ?? (chats && !hasMore ? chats.length : null);
         onCount(total === null ? '' : String(total));
+    };
+
+    /**
+     * 필터(캐릭터·정렬) 패널과 요약 줄. 패널을 접어 두면 기본값에서 바꾼 것만 검색칸 아래 한 줄로 보여 준다
+     * (필터가 걸려 있는데 모르는 일이 없도록)
+     */
+    const renderFilterBar = () => {
+        const open = getSettings().filtersOpen;
+        filterPanel.hidden = !open;
+        filterToggle.setAttribute('aria-expanded', String(open));
+        filterToggle.classList.toggle('active', open);
+
+        const parts = [];
+        if (ownerFilter) parts.push(ownerSelect.selectedOptions[0]?.textContent ?? '');
+        if (sort !== 'recent') parts.push(sortSelect.selectedOptions[0]?.textContent ?? '');
+        const changed = parts.length > 0;
+        // 접혀 있을 때 필터 버튼에 점을 찍어 바뀐 상태임을 알린다
+        filterToggle.classList.toggle('st-lobby-filter-changed', changed);
+        filterSummary.hidden = open || !changed;
+        filterSummaryText.textContent = parts.join(' · ');
     };
 
     const renderList = () => {
@@ -1194,6 +1220,19 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     selectToggle.addEventListener('click', () => {
         if (managing) return;
         setSelecting(!selecting);
+    });
+    filterToggle.addEventListener('click', () => {
+        setSetting('filtersOpen', !getSettings().filtersOpen);
+        renderFilterBar();
+    });
+    filterClear.addEventListener('click', () => {
+        if (managing) return;
+        // 정렬은 기억되므로 기본(최근 순)으로 되돌려 저장한다
+        sort = 'recent';
+        sortSelect.value = sort;
+        if (getSettings().sort !== sort) setSetting('sort', sort);
+        if (ownerFilter) setOwner('');
+        else renderAll();
     });
     selectDoneButton.addEventListener('click', () => {
         if (managing) return;

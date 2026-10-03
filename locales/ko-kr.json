@@ -8,7 +8,9 @@
 
     "chat_lobby.title": "전체 채팅",
     "chat_lobby.search_placeholder": "이름·마지막 메시지 검색",
-    "chat_lobby.select_mode": "여러 개 선택",
+    "chat_lobby.filter_button": "필터",
+    "chat_lobby.select_button": "선택",
+    "chat_lobby.filter_clear": "필터 지우기",
     "chat_lobby.reload": "새로 고침",
     "chat_lobby.sort": "정렬",
     "chat_lobby.sort_recent": "최근 순",
