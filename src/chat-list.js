@@ -3,8 +3,8 @@ import { renderExtensionTemplateAsync } from '../../../../extensions.js';
 import { getGroupAvatar, groups } from '../../../../group-chats.js';
 import { Popup } from '../../../../popup.js';
 import { deleteLobbyChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
-import { EXTENSION_NAME, FILTERS, LOG_PREFIX, SORTS } from './constants.js';
-import { chatKey, getAllChats, getChatOwners, getMatchedMessage, searchOwnerChats } from './data-source.js';
+import { EXTENSION_NAME, LOG_PREFIX, SORTS } from './constants.js';
+import { chatKey, getAllChats, getChatOwners, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
 import { tr } from './i18n.js';
 import { askName } from './name-prompt.js';
 import { getSettings, setSetting } from './settings.js';
@@ -12,7 +12,6 @@ import { formatMonth, formatShortDate, getDateBucket, hasName, highlightText, sa
 
 /** @typedef {import('./data-source.js').LobbyChat} LobbyChat */
 /** @typedef {'recent' | 'oldest' | 'name' | 'messages' | 'owner'} LobbySort */
-/** @typedef {'all' | 'character' | 'group'} LobbyFilter */
 /** @typedef {'owner' | 'name' | 'message' | 'content'} MatchPlace */
 /** @typedef {{ key: string, title: string, chats: LobbyChat[] }} Section 제목이 빈 문자열이면 제목(접기) 없이 보인다 */
 /**
@@ -55,7 +54,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     const find = (/** @type {string} */ selector) => /** @type {HTMLElement} */ (root.querySelector(selector));
     const searchInput = /** @type {HTMLInputElement} */ (find('.st-lobby-search'));
-    const filterSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-filter'));
+    const ownerSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-owner-select'));
     const sortSelect = /** @type {HTMLSelectElement} */ (find('.st-lobby-sort'));
     const selectToggle = find('.st-lobby-select-toggle');
     const reloadButton = find('.st-lobby-reload');
@@ -79,9 +78,13 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     /** 늦게 도착한 응답을 버리기 위한 번호 */
     let loadToken = 0;
     let query = '';
-    // 보기(캐릭터/그룹)는 기억하지 않는다. 다음에 열었을 때 걸러진 채로 남아 있으면 검색이 안 되는 것처럼 보인다
-    /** @type {LobbyFilter} */
-    let filter = 'all';
+    // 고른 캐릭터·그룹(ownerKey). '' = 모두. 기억하지 않는다 — 다음에 열었을 때 걸러진 채로 남아 있으면
+    // 검색이 안 되는 것처럼 보인다
+    let ownerFilter = '';
+    /** @type {LobbyChat[] | null} 고른 캐릭터의 채팅 전부(개수 제한 없음). null = 불러오는 중 */
+    let ownerChats = null;
+    let ownerFailed = false;
+    let ownerToken = 0;
     /** @type {LobbySort} */
     let sort = /** @type {LobbySort} */ (getSettings().sort);
     let selecting = false;
@@ -137,13 +140,59 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         return load(Math.max(loadedLimit, chats?.length ?? 0) + step);
     };
 
+    // ── 캐릭터 고르기 ──
+    const fillOwnerOptions = () => {
+        const options = getOwnerOptions();
+        ownerSelect.replaceChildren(
+            new Option(tr('owner_all', 'All characters'), ''),
+            ...options.map(owner => new Option(owner.label, owner.key)),
+        );
+        // 고른 캐릭터가 사라졌으면(삭제 등) 모두로
+        if (ownerFilter && !options.some(owner => owner.key === ownerFilter)) setOwner('');
+        ownerSelect.value = ownerFilter;
+    };
+
+    /** 고른 캐릭터의 채팅을 전부 불러온다(그 캐릭터 채팅 파일만 읽어서 가볍다) */
+    const loadOwner = async () => {
+        const token = ++ownerToken;
+        const owner = getOwnerOptions().find(option => option.key === ownerFilter);
+        if (!owner) return;
+        ownerChats = null;
+        ownerFailed = false;
+        renderAll();
+        try {
+            const result = await getOwnerChats(owner);
+            if (token !== ownerToken) return;
+            ownerChats = result;
+        } catch (error) {
+            if (token !== ownerToken) return;
+            console.error(LOG_PREFIX, 'failed to load the chats of', owner, error);
+            ownerFailed = true;
+        }
+        renderAll();
+    };
+
+    /** @param {string} key ownerKey, '' = 모두 */
+    const setOwner = (key) => {
+        ownerFilter = key;
+        ownerSelect.value = key;
+        ownerChats = null;
+        ownerFailed = false;
+        ownerToken++;
+        // 다른 범위에서 고른 채팅·찾은 결과는 버린다(안 보이는 채팅을 지우거나 엉뚱한 결과를 보이지 않도록)
+        selected.clear();
+        if (content) content.controller.abort();
+        content = null;
+        if (key) void loadOwner();
+        else renderAll();
+    };
+
+    /** 지금 목록의 바탕: 캐릭터를 골랐으면 그 캐릭터의 채팅 전부, 아니면 불러온 최근 채팅 */
+    const getBase = () => (ownerFilter ? ownerChats : chats);
+
     // ── 보이는 목록 ──
     /** @param {LobbyChat} chat */
-    const matchesFilter = (chat) => {
-        if (filter === 'character') return !chat.groupId;
-        if (filter === 'group') return !!chat.groupId;
-        return true;
-    };
+    const matchesFilter = chat => !ownerFilter || ownerKey(chat) === ownerFilter;
 
     /** 검색 낱말(소문자). 검색하지 않으면 빈 배열 */
     const getWords = () => query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -183,15 +232,16 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     };
 
     /**
-     * 목록에 놓일 채팅: 불러온 채팅 + 대화 내용 검색에서 찾은, 아직 안 불러온 채팅
+     * 목록에 놓일 채팅: 바탕(불러온 채팅 또는 고른 캐릭터의 채팅) + 대화 내용 검색에서 찾은, 바탕에 없는 채팅
      * @returns {LobbyChat[]}
      */
     const getCandidates = () => {
-        if (!chats) return [];
+        const base = getBase();
+        if (!base) return [];
         const found = contentFor()?.results;
-        if (!found?.size) return chats;
-        const loaded = new Set(chats.map(chat => chat.key));
-        return [...chats, ...[...found.values()].filter(chat => !loaded.has(chat.key))];
+        if (!found?.size) return base;
+        const loaded = new Set(base.map(chat => chat.key));
+        return [...base, ...[...found.values()].filter(chat => !loaded.has(chat.key))];
     };
 
     /** @param {LobbyChat} chat */
@@ -217,7 +267,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     /** @returns {Section[]} */
     const getSections = () => {
-        if (!chats) return [];
+        if (!getBase()) return [];
         const visible = getCandidates().filter(matches);
 
         // 검색 중에는 날짜·캐릭터 대신 '어디에서 찾았는지'로 묶는다. 묶음 안은 고른 정렬 순서
@@ -292,12 +342,22 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     const renderList = () => {
         list.replaceChildren();
 
-        if (!chats) {
+        const base = getBase();
+        if (ownerFilter && !base) {
+            const message = ownerFailed
+                ? createMessage(tr('owner_load_failed', 'Could not load the chats of this character.'))
+                : createMessage(tr('owner_loading', 'Loading the chats of this character…'));
+            if (!ownerFailed) message.prepend(createIcon('fa-spinner fa-spin'), ' ');
+            list.append(message);
+            if (ownerFailed) list.append(createFooterButton('fa-rotate-right', tr('retry', 'Try again'), () => void loadOwner()));
+            return;
+        }
+        if (!base) {
             if (loadFailed) list.append(createMessage(tr('load_failed', 'Could not load the chats.')));
             return;
         }
-        if (chats.length === 0) {
-            list.append(createMessage(tr('empty', 'No chats yet.')));
+        if (base.length === 0) {
+            list.append(createMessage(ownerFilter ? tr('owner_empty', 'This character has no chats yet.') : tr('empty', 'No chats yet.')));
             return;
         }
 
@@ -307,17 +367,17 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         const sections = getSections();
         if (sections.length === 0) {
-            // 보기(캐릭터/그룹) 때문에 숨은 결과가 있으면 '없음'이 아니라 그렇다고 알려 주고 바로 풀 수 있게 한다
-            const hiddenByFilter = filter !== 'all' ? getCandidates().filter(matchesQuery).length : 0;
-            if (hiddenByFilter) {
-                const kind = filter === 'group' ? tr('filter_group_noun', 'group chats') : tr('filter_character_noun', 'character chats');
+            // 고른 캐릭터 때문에 숨은 결과가 있으면 '없음'이 아니라 그렇다고 알려 주고 바로 풀 수 있게 한다
+            // (다른 캐릭터의 채팅은 최근 것만 불러와 있어 0개여도 실제로는 있을 수 있으므로, 버튼은 항상 둔다)
+            if (ownerFilter && query.trim()) {
+                const ownerName = ownerSelect.selectedOptions[0]?.textContent ?? '';
+                const hidden = (chats ?? []).filter(chat => !matchesFilter(chat) && matchesQuery(chat)).length;
+                const text = hidden
+                    ? tr('owner_hidden', 'No matches in {0}. {1} found in other chats.').replace('{1}', String(hidden))
+                    : tr('owner_none', 'No matches in {0}.');
                 list.append(
-                    createMessage(tr('filter_hidden', 'No {0} here. {1} found in other chats.').replace('{0}', kind).replace('{1}', String(hiddenByFilter))),
-                    createFooterButton('fa-filter-circle-xmark', tr('show_all', 'Show all'), () => {
-                        filter = 'all';
-                        filterSelect.value = 'all';
-                        renderAll();
-                    }),
+                    createMessage(text.replace('{0}', ownerName)),
+                    createFooterButton('fa-users', tr('owner_show_all', 'Search all characters'), () => setOwner('')),
                 );
                 return;
             }
@@ -374,6 +434,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     const renderFooter = () => {
         footer.replaceChildren();
+        // 캐릭터를 골랐으면 그 캐릭터의 채팅은 이미 전부 있다(더 불러오기·모든 채팅에서 검색이 필요 없다)
+        if (ownerFilter) return;
         if (loading) {
             const message = createMessage(chats ? tr('loading_more', 'Loading more chats…') : tr('loading', 'Loading chats…'));
             message.prepend(createIcon('fa-spinner fa-spin'), ' ');
@@ -476,7 +538,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         if (!words.length) return;
         if (content) content.controller.abort();
 
-        const owners = getChatOwners();
+        // 캐릭터를 골랐으면 그 캐릭터만 검색한다(훨씬 빠르다)
+        const owners = getChatOwners().filter(owner => !ownerFilter || ownerKey(owner) === ownerFilter);
         /** @type {ContentSearch} */
         const state = {
             query: query.trim(),
@@ -547,7 +610,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
     /** 불러온 일부만으로 검색·정렬하고 있다는 안내 */
     const renderNote = () => {
-        const partial = !!chats && hasMore && (!!query.trim() || filter !== 'all' || sort !== 'recent');
+        // 캐릭터를 골랐으면 그 캐릭터의 채팅은 전부 있으므로 해당 없음
+        const partial = !ownerFilter && !!chats && hasMore && (!!query.trim() || sort !== 'recent');
         note.hidden = !partial;
         note.textContent = partial
             ? tr('partial_note', 'Showing only the {0} most recent chats loaded so far.').replace('{0}', String(chats.length))
@@ -754,17 +818,19 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
             }
             const oldKey = chat.key;
             const actual = await renameLobbyChat(chat, name);
-            chat.fileName = actual;
-            chat.key = chatKey(chat);
-            if (selected.delete(oldKey)) selected.add(chat.key);
-            // 대화 내용 검색 결과에도 같은 채팅이 따로 들어 있을 수 있다
-            const result = content?.results.get(oldKey);
-            if (content && result) {
-                content.results.delete(oldKey);
-                result.fileName = actual;
-                result.key = chat.key;
-                content.results.set(chat.key, result);
+            // 같은 채팅이 최근 채팅·고른 캐릭터의 채팅·대화 내용 검색 결과에 따로 들어 있을 수 있다. 모두 새 이름으로
+            const copies = [...(chats ?? []), ...(ownerChats ?? []), ...(content ? content.results.values() : [])]
+                .filter(other => other.key === oldKey);
+            for (const copy of new Set([chat, ...copies])) {
+                copy.fileName = actual;
+                copy.key = chatKey(copy);
             }
+            if (content?.results.has(oldKey)) {
+                const result = /** @type {LobbyChat} */ (content.results.get(oldKey));
+                content.results.delete(oldKey);
+                content.results.set(result.key, result);
+            }
+            if (selected.delete(oldKey)) selected.add(chat.key);
             toastr.success(tr('renamed', 'Chat renamed.'), actual);
         } catch (error) {
             console.error(LOG_PREFIX, 'failed to rename chat', error);
@@ -780,7 +846,9 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
      * @param {LobbyChat} chat
      * @param {Set<string>} removing 함께 지우는 채팅 key
      */
-    const remainingSiblings = (chat, removing) => (chats ?? [])
+    const remainingSiblings = (chat, removing) => (
+        // 그 캐릭터를 골라 두었으면 채팅이 전부 있으니 그쪽이 정확하다
+        ownerFilter && ownerChats && ownerFilter === ownerKey(chat) ? ownerChats : (chats ?? []))
         .filter(other => !other.groupId && other.avatar === chat.avatar && !removing.has(other.key))
         .map(other => other.fileName);
 
@@ -789,7 +857,8 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
      * @param {LobbyChat} chat
      */
     const forgetChat = (chat) => {
-        chats = (chats ?? []).filter(other => other.key !== chat.key);
+        if (chats) chats = chats.filter(other => other.key !== chat.key);
+        if (ownerChats) ownerChats = ownerChats.filter(other => other.key !== chat.key);
         content?.results.delete(chat.key);
         selected.delete(chat.key);
     };
@@ -911,7 +980,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     };
 
     // ── 입력 연결 ──
-    filterSelect.value = FILTERS.includes(filter) ? filter : 'all';
+    fillOwnerOptions();
     sortSelect.value = SORTS.includes(sort) ? sort : 'recent';
 
     let searchTimer = 0;
@@ -931,9 +1000,12 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         event.stopPropagation();
         searchInput.blur();
     });
-    filterSelect.addEventListener('change', () => {
-        filter = /** @type {LobbyFilter} */ (filterSelect.value);
-        renderAll();
+    ownerSelect.addEventListener('change', () => {
+        if (managing) {
+            ownerSelect.value = ownerFilter;
+            return;
+        }
+        setOwner(ownerSelect.value);
     });
     sortSelect.addEventListener('change', () => {
         sort = /** @type {LobbySort} */ (sortSelect.value);
@@ -942,7 +1014,10 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
     });
     reloadButton.addEventListener('click', () => {
         if (managing) return;
+        // 그사이 캐릭터가 추가·삭제됐을 수 있다
+        fillOwnerOptions();
         void load(currentLimit());
+        if (ownerFilter) void loadOwner();
     });
     selectToggle.addEventListener('click', () => {
         if (managing) return;

@@ -14,11 +14,8 @@
             </button>
         </div>
         <div class="st-lobby-row">
-            <select class="text_pole st-lobby-filter" title="Show" data-i18n="[title]chat_lobby.filter">
-                <option value="all" data-i18n="chat_lobby.filter_all">All</option>
-                <option value="character" data-i18n="chat_lobby.filter_character">Characters</option>
-                <option value="group" data-i18n="chat_lobby.filter_group">Groups</option>
-            </select>
+            <!-- 선택지는 chat-list.js 가 캐릭터·그룹 목록으로 채운다 -->
+            <select class="text_pole st-lobby-owner-select" title="Character" data-i18n="[title]chat_lobby.owner_select"></select>
             <select class="text_pole st-lobby-sort" title="Sort" data-i18n="[title]chat_lobby.sort">
                 <option value="recent" data-i18n="chat_lobby.sort_recent">Recent</option>
                 <option value="oldest" data-i18n="chat_lobby.sort_oldest">Oldest</option>

@@ -16,7 +16,6 @@ export const SELECTORS = Object.freeze({
 export const LOAD_COUNTS = Object.freeze([20, 50, 100, 200, 0]);
 
 export const SORTS = Object.freeze(['recent', 'oldest', 'name', 'messages', 'owner']);
-export const FILTERS = Object.freeze(['all', 'character', 'group']);
 
 export const SETTINGS_VERSION = 1;
 

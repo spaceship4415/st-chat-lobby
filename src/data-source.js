@@ -101,6 +101,79 @@ export function getChatOwners() {
 }
 
 /**
+ * 캐릭터·그룹을 가리키는 키('c:아바타' / 'g:그룹id'). 캐릭터 고르기 칸의 값
+ * @param {{ avatar: string, groupId: string }} owner
+ */
+export function ownerKey(owner) {
+    return owner.groupId ? `g:${owner.groupId}` : `c:${owner.avatar}`;
+}
+
+/**
+ * 캐릭터 고르기 칸의 선택지: 모든 캐릭터와 그룹(채팅이 없어도), 이름 순.
+ * 같은 이름이 여럿이면(카드 복사 등) 아바타 파일 이름을 붙여 구분한다.
+ * @returns {(ChatOwner & { key: string, label: string })[]}
+ */
+export function getOwnerOptions() {
+    const owners = [
+        ...characters.map(c => ({ avatar: String(c.avatar ?? ''), groupId: '', name: String(c.name ?? '') })).filter(o => o.avatar),
+        ...groups.map(g => ({ avatar: '', groupId: String(g.id), name: String(g.name ?? '') })),
+    ];
+    const nameCount = new Map();
+    for (const owner of owners) nameCount.set(owner.name, (nameCount.get(owner.name) ?? 0) + 1);
+    return owners
+        .map(owner => {
+            let label = owner.name;
+            if (nameCount.get(owner.name) > 1 && owner.avatar) label += ` (${owner.avatar.replace(/\.png$/i, '')})`;
+            // 그룹은 이름 앞에 표시(네이티브 select 라 아이콘을 넣을 수 없다)
+            if (owner.groupId) label = `👥 ${label}`;
+            return { ...owner, key: ownerKey(owner), label };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) || a.label.localeCompare(b.label));
+}
+
+/**
+ * 한 캐릭터·그룹의 채팅 전부(개수 제한 없음, 최근 순). 캐릭터를 골랐을 때 쓴다.
+ * 그 캐릭터의 채팅 파일만 읽으므로 전체를 불러오는 것보다 훨씬 가볍다.
+ * @param {ChatOwner} owner
+ * @returns {Promise<LobbyChat[]>}
+ */
+export async function getOwnerChats(owner) {
+    // 캐릭터는 채팅 목록 API, 그룹은 검색 API(검색어 없음 = 전부)로 메시지 수·마지막 메시지까지 받는다
+    const response = await fetch(owner.groupId ? '/api/chats/search' : '/api/characters/chats', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(owner.groupId ? { query: '', group_id: owner.groupId } : { avatar_url: owner.avatar }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    // 채팅 폴더가 없으면 { error: true } = 채팅 없음
+    if (!Array.isArray(data)) return [];
+
+    return data
+        .filter(item => typeof item?.file_name === 'string')
+        .map(item => {
+            const moment = timestampToMoment(item.last_mes);
+            const count = Number(owner.groupId ? item.message_count : item.chat_items) || 0;
+            const lastMessage = owner.groupId ? item.preview_message : item.mes;
+            /** @type {LobbyChat} */
+            const chat = {
+                key: '',
+                avatar: owner.groupId ? '' : owner.avatar,
+                groupId: owner.groupId,
+                ownerName: owner.name,
+                fileName: item.file_name.replace(/\.jsonl$/, ''),
+                lastTime: moment.isValid() ? moment.valueOf() : 0,
+                preview: count > 0 && typeof lastMessage === 'string' ? toPlainPreview(lastMessage) : '',
+                count,
+                size: typeof item.file_size === 'string' ? item.file_size : '',
+            };
+            chat.key = chatKey(chat);
+            return chat;
+        })
+        .sort((a, b) => b.lastTime - a.lastTime || b.fileName.localeCompare(a.fileName));
+}
+
+/**
  * 한 캐릭터·그룹의 채팅을 대화 내용까지 검색한다(서버가 채팅 파일을 끝까지 읽는다 — 느리다).
  * 서버 규칙: 낱말이 모두 어느 메시지에든(서로 다른 메시지여도) 있거나 채팅 이름에 있으면 맞음. 대소문자 무시.
  * 어느 메시지에서 찾았는지는 알려 주지 않는다(getMatchedMessage 로 따로 찾는다).

@@ -48,7 +48,7 @@
     font-size: 16px;
 }
 
-.st-lobby-filter,
+.st-lobby-owner-select,
 .st-lobby-sort {
     flex: 1;
     min-width: 0;
@@ -591,7 +591,7 @@ button.st-lobby-card:focus-visible {
 
 @media (min-width: 768px) {
     .st-lobby-search,
-    .st-lobby-filter,
+    .st-lobby-owner-select,
     .st-lobby-sort {
         min-height: 32px;
         font-size: inherit;
