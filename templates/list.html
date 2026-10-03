@@ -1,0 +1,46 @@
+<div class="st-lobby">
+    <div class="st-lobby-tools">
+        <div class="st-lobby-row">
+            <input type="search" class="text_pole st-lobby-search" enterkeyhint="search" autocomplete="off"
+                placeholder="Search characters, chats and messages"
+                data-i18n="[placeholder]chat_lobby.search_placeholder" />
+            <button type="button" class="menu_button st-lobby-icon-button st-lobby-select-toggle"
+                title="Select chats" data-i18n="[title]chat_lobby.select_mode">
+                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="menu_button st-lobby-icon-button st-lobby-reload"
+                title="Refresh" data-i18n="[title]chat_lobby.reload">
+                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="st-lobby-row">
+            <select class="text_pole st-lobby-filter" title="Show" data-i18n="[title]chat_lobby.filter">
+                <option value="all" data-i18n="chat_lobby.filter_all">All</option>
+                <option value="character" data-i18n="chat_lobby.filter_character">Characters</option>
+                <option value="group" data-i18n="chat_lobby.filter_group">Groups</option>
+            </select>
+            <select class="text_pole st-lobby-sort" title="Sort" data-i18n="[title]chat_lobby.sort">
+                <option value="recent" data-i18n="chat_lobby.sort_recent">Recent</option>
+                <option value="oldest" data-i18n="chat_lobby.sort_oldest">Oldest</option>
+                <option value="name" data-i18n="chat_lobby.sort_name">Name</option>
+                <option value="messages" data-i18n="chat_lobby.sort_messages">Most messages</option>
+                <option value="owner" data-i18n="chat_lobby.sort_owner">By character</option>
+            </select>
+        </div>
+        <div class="st-lobby-select-bar" hidden>
+            <label class="st-lobby-select-all">
+                <input type="checkbox" />
+                <span data-i18n="chat_lobby.select_all">Select all</span>
+            </label>
+            <span class="st-lobby-selected-count"></span>
+            <button type="button" class="menu_button st-lobby-delete-selected" disabled>
+                <i class="fa-solid fa-trash-can" aria-hidden="true"></i>
+                <span data-i18n="chat_lobby.delete">Delete</span>
+            </button>
+            <button type="button" class="menu_button st-lobby-select-done" data-i18n="chat_lobby.done">Done</button>
+        </div>
+        <div class="st-lobby-note" hidden></div>
+    </div>
+    <div class="st-lobby-list" role="list"></div>
+    <div class="st-lobby-footer"></div>
+</div>

@@ -1,0 +1,16 @@
+{
+    "display_name": "Chat Lobby",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "spaceship4415",
+    "version": "0.1.0",
+    "license": "SEE LICENSE",
+    "auto_update": false,
+    "i18n": {
+        "ko": "locales/ko-kr.json",
+        "ko-kr": "locales/ko-kr.json"
+    }
+}

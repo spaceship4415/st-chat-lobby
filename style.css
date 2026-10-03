@@ -1,0 +1,481 @@
+/*
+ * 모바일 우선: 기본 규칙은 좁은 터치 화면 기준이고, 넓은 화면은 아래 min-width 미디어 쿼리에서만 보정한다.
+ * 터치 대상은 최소 44px 높이를 지킨다.
+ */
+
+/* ── 시작 화면: ST 최근 채팅은 숨기고(지우지 않음) 그 자리에 목록 ── */
+.st-lobby-welcome .welcomeRecent > .recentChatList,
+.st-lobby-welcome .recentChatsSettings {
+    display: none;
+}
+
+/* 좁은 화면에서 '(16)'만 다음 줄로 떨어지지 않게 */
+.st-lobby-welcome .recentChatsTitle {
+    white-space: nowrap;
+}
+
+.st-lobby-title-count {
+    font-weight: normal;
+    opacity: 0.7;
+}
+
+/* ── 목록 ── */
+.st-lobby {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    text-align: left;
+}
+
+.st-lobby-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.st-lobby-row {
+    display: flex;
+    gap: 6px;
+}
+
+.st-lobby-search {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    /* iOS 포커스 확대 방지 */
+    font-size: 16px;
+}
+
+.st-lobby-filter,
+.st-lobby-sort {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+}
+
+.st-lobby-icon-button {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.st-lobby-icon-button.active {
+    border-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeQuoteColor);
+}
+
+/* 선택 모드 막대 */
+.st-lobby-select-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--SmartThemeQuoteColor);
+    border-radius: 10px;
+    background-color: var(--black30a);
+}
+
+.st-lobby-select-bar[hidden] {
+    display: none;
+}
+
+.st-lobby-select-all {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    cursor: pointer;
+}
+
+.st-lobby-select-all input {
+    width: 20px;
+    height: 20px;
+    margin: 0;
+}
+
+.st-lobby-selected-count {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+.st-lobby-delete-selected,
+.st-lobby-select-done {
+    min-height: 44px;
+    margin: 0;
+}
+
+.st-lobby-delete-selected:not(:disabled) {
+    color: #ff6b6b;
+}
+
+.st-lobby-delete-selected:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.st-lobby-note {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.st-lobby-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 날짜·캐릭터 제목. 스크롤해도 위에 붙어 있다 */
+.st-lobby-heading {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin-top: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background-color: var(--SmartThemeBlurTintColor);
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    font-size: 0.85em;
+    font-weight: bold;
+    opacity: 0.9;
+}
+
+.st-lobby-item {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+}
+
+.st-lobby-item-open {
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+.st-lobby-item-selected {
+    border-color: var(--SmartThemeQuoteColor);
+    background-color: var(--black30a);
+}
+
+/* 줄의 왼쪽 전체가 누르는 곳 */
+.st-lobby-main {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 4px 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.st-lobby-main:hover {
+    background-color: var(--white30a);
+}
+
+.st-lobby-main:focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+    outline-offset: -2px;
+}
+
+.st-lobby-check {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    margin: 12px 0 0;
+    pointer-events: none;
+}
+
+.st-lobby-main .st-lobby-avatar {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.st-lobby-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.st-lobby-top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.st-lobby-owner {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: bold;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.st-lobby-group-icon {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.st-lobby-date {
+    flex-shrink: 0;
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+.st-lobby-name {
+    font-size: 0.9em;
+    opacity: 0.85;
+    overflow-wrap: anywhere;
+}
+
+.st-lobby-preview {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 0.85em;
+    opacity: 0.75;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.st-lobby-preview-empty {
+    font-style: italic;
+    opacity: 0.5;
+}
+
+.st-lobby-meta {
+    font-size: 0.8em;
+    opacity: 0.6;
+}
+
+.st-lobby-badge {
+    padding: 0 6px;
+    border-radius: 6px;
+    background-color: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBodyColor);
+    white-space: nowrap;
+}
+
+/* 오른쪽 이름 바꾸기·삭제. 휴대폰에서도 누르기 쉽게 세로로 둔다 */
+.st-lobby-actions {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px;
+}
+
+.st-lobby-action {
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.75;
+}
+
+.st-lobby-action:hover {
+    opacity: 1;
+}
+
+.st-lobby-delete:not([aria-disabled="true"]):hover {
+    color: #ff6b6b;
+}
+
+.st-lobby-action[aria-disabled="true"] {
+    opacity: 0.3;
+}
+
+.st-lobby-message {
+    padding: 10px 4px;
+    text-align: center;
+    opacity: 0.7;
+}
+
+.st-lobby-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.st-lobby-footer:empty {
+    display: none;
+}
+
+.st-lobby-footer-button {
+    min-height: 44px;
+    margin: 0;
+    justify-content: center;
+}
+
+.st-lobby-footer-hint {
+    margin-top: -2px;
+    text-align: center;
+    opacity: 0.6;
+}
+
+/* 일괄 삭제 중에는 목록을 누르지 못하게 */
+.st-lobby-busy .st-lobby-list,
+.st-lobby-busy .st-lobby-tools {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+/* 확인 창 */
+.st-lobby-confirm-name {
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.st-lobby-confirm-list {
+    margin: 0;
+    padding-left: 1.2em;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.st-lobby-confirm-warning {
+    margin: 10px 0 0;
+    color: #ff6b6b;
+}
+
+/* ── 마법봉 메뉴의 창 ── */
+.st-lobby-popup-title {
+    margin: 0 0 8px;
+    padding-right: 40px;
+}
+
+/* 이름 입력: 긴 이름이 잘리지 않게 여러 줄로 */
+.st-lobby-name-popup .popup-input {
+    width: 100%;
+    font-size: max(16px, 1em);
+    overflow-wrap: anywhere;
+    resize: none;
+}
+
+.st-lobby-popup .popup-controls {
+    width: 100%;
+    gap: 10px;
+}
+
+.st-lobby-popup .popup-controls .popup-button-ok,
+.st-lobby-popup .popup-controls .popup-button-cancel {
+    flex: 1;
+    min-height: 44px;
+}
+
+/* ── 확장 설정 패널 (st-chat-setup 과 같은 모양) ── */
+.st-lobby-settings .stls-header-icon {
+    margin-right: 6px;
+    opacity: 0.8;
+}
+
+.st-lobby-settings .stls-group {
+    margin: 8px 0;
+    padding: 6px 10px 4px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background-color: var(--black30a);
+}
+
+.st-lobby-settings .stls-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.st-lobby-settings .stls-item + .stls-field {
+    border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 50%, transparent);
+}
+
+.st-lobby-settings .stls-item input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin: 2px 0 0;
+}
+
+.st-lobby-settings .stls-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.st-lobby-settings .stls-item-title,
+.st-lobby-settings .stls-item-hint {
+    line-height: 1.35;
+}
+
+.st-lobby-settings .stls-item-hint {
+    opacity: 0.65;
+}
+
+.st-lobby-settings .stls-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.st-lobby-settings .stls-field select {
+    width: 100%;
+    min-height: 40px;
+    margin: 0;
+}
+
+@media (min-width: 768px) {
+    .st-lobby-search,
+    .st-lobby-filter,
+    .st-lobby-sort {
+        min-height: 32px;
+        font-size: inherit;
+    }
+
+    .st-lobby-icon-button {
+        width: 32px;
+        height: 32px;
+    }
+
+    .st-lobby-select-all,
+    .st-lobby-delete-selected,
+    .st-lobby-select-done,
+    .st-lobby-footer-button {
+        min-height: 32px;
+    }
+
+    .st-lobby-actions {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .st-lobby-action {
+        width: 32px;
+        height: 32px;
+    }
+
+    .st-lobby-popup .popup-controls .popup-button-ok,
+    .st-lobby-popup .popup-controls .popup-button-cancel {
+        flex: 0 1 auto;
+        min-height: unset;
+    }
+}

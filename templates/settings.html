@@ -1,0 +1,31 @@
+<div id="st_chat_lobby_settings" class="st-lobby-settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <b><i class="fa-solid fa-table-list stls-header-icon"></i><span data-i18n="chat_lobby.settings_title">Chat Lobby</span></b>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content stls-body">
+            <section class="stls-group">
+                <label class="stls-item" for="st_chat_lobby_replace">
+                    <input id="st_chat_lobby_replace" type="checkbox" data-setting="replaceWelcome" />
+                    <span class="stls-item-text">
+                        <span class="stls-item-title" data-i18n="chat_lobby.setting_replace">Show all chats instead of recent chats on the start screen</span>
+                        <small class="stls-item-hint" data-i18n="chat_lobby.setting_replace_hint">When off, the start screen shows SillyTavern's recent chats. All chats can still be opened from the wand menu.</small>
+                    </span>
+                </label>
+
+                <label class="stls-field" for="st_chat_lobby_load_count">
+                    <span class="stls-item-title" data-i18n="chat_lobby.setting_load_count">Chats to load at once</span>
+                    <select id="st_chat_lobby_load_count" class="text_pole" data-setting="loadCount" data-type="number">
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="0" data-i18n="chat_lobby.setting_load_all">All</option>
+                    </select>
+                    <small class="stls-item-hint" data-i18n="chat_lobby.setting_load_count_hint">The most recent chats are loaded first. The more you load, the longer it takes; use Load more at the bottom of the list for the rest. Search, filters and sorting apply to the loaded chats.</small>
+                </label>
+            </section>
+        </div>
+    </div>
+</div>
