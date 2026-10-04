@@ -60,7 +60,9 @@ function mount(panel) {
     panel.setAttribute(MOUNTED_ATTR, '');
     panel.classList.add('st-lobby-welcome');
 
-    // 제목 '최근 채팅' → '전체 채팅 (N)'. ST 는 data-i18n 이 달린 요소를 다시 번역하므로 키째 바꾼다
+    // 제목 '최근 채팅' → '전체 채팅 (N)'. ST 는 data-i18n 이 달린 요소를 다시 번역하므로 키째 바꾼다.
+    // 화면에 붙은 요소에서 data-i18n 을 지우면 ST 번역기가 속성 변경을 보고 빈 키로 번역하다 터져서
+    // (i18n.js 'reading split' 에러), 속성이 없는 새 제목을 만들어 통째로 바꿔 끼운다
     const count = document.createElement('span');
     count.className = 'st-lobby-title-count';
     const title = panel.querySelector(SELECTORS.recentChatsTitle);
@@ -68,8 +70,10 @@ function mount(panel) {
         const label = document.createElement('span');
         label.setAttribute('data-i18n', 'chat_lobby.title');
         label.textContent = tr('title', 'All Chats');
-        title.removeAttribute('data-i18n');
-        title.replaceChildren(label, ' ', count);
+        const newTitle = title.cloneNode(false);
+        newTitle.removeAttribute('data-i18n');
+        newTitle.append(label, ' ', count);
+        title.replaceWith(newTitle);
     }
 
     const host = document.createElement('div');
