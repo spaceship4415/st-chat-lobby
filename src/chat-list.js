@@ -153,11 +153,32 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         }
     };
 
-    const loadMore = () => {
+    /** 목록을 실제로 스크롤하는 조상(ST 팝업 안쪽 등) */
+    const getScroller = () => {
+        for (let el = list.parentElement; el; el = el.parentElement) {
+            const { overflowY } = getComputedStyle(el);
+            if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+        }
+        return document.scrollingElement;
+    };
+
+    const loadMore = async () => {
         const step = loadStep();
-        if (!step) return load(0);
+        // 목록을 통째로 다시 그리면 브라우저가 아래 '더 보기' 자리에 맞춰 스크롤을 옮기거나(새 줄만큼 내려감),
+        // 새로 불러온 고정 채팅이 위에 끼어 줄이 밀린다. 보고 있던 줄을 기억해 두었다가 같은 자리에 둔다
+        const scroller = getScroller();
+        const top = scroller && scroller !== document.scrollingElement ? scroller.getBoundingClientRect().top : 0;
+        const anchor = /** @type {HTMLElement[]} */ ([...list.querySelectorAll('.st-lobby-item')])
+            .find(el => el.getBoundingClientRect().bottom > top);
+        const key = anchor?.dataset.key;
+        const offset = anchor ? anchor.getBoundingClientRect().top - top : 0;
+
         // 지금 불러온 것보다 한 단계 더
-        return load(Math.max(loadedLimit, chats?.length ?? 0) + step);
+        await load(step ? Math.max(loadedLimit, chats?.length ?? 0) + step : 0);
+
+        if (!scroller || key === undefined) return;
+        const same = /** @type {HTMLElement[]} */ ([...list.querySelectorAll('.st-lobby-item')]).find(el => el.dataset.key === key);
+        if (same) scroller.scrollTop += same.getBoundingClientRect().top - top - offset;
     };
 
     // ── 캐릭터 고르기 ──
@@ -794,6 +815,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         const open = isOpenChat(chat);
         const item = document.createElement('div');
         item.className = 'st-lobby-item';
+        item.dataset.key = chat.key;
         item.setAttribute('role', 'listitem');
         item.classList.toggle('st-lobby-item-open', open);
         item.classList.toggle('st-lobby-item-selected', selected.has(chat.key));
