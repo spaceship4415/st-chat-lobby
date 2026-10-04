@@ -162,10 +162,16 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         return document.scrollingElement;
     };
 
+    /** 더 불러오기로 새로 들어온 채팅 키. 잠깐 표시한다 */
+    let freshKeys = new Set();
+    let freshTimer = 0;
+
     const loadMore = async () => {
         const step = loadStep();
-        // 목록을 통째로 다시 그리면 브라우저가 아래 '더 보기' 자리에 맞춰 스크롤을 옮기거나(새 줄만큼 내려감),
-        // 새로 불러온 고정 채팅이 위에 끼어 줄이 밀린다. 보고 있던 줄을 기억해 두었다가 같은 자리에 둔다
+        // 서버는 파일 수정 시각 순으로 잘라 주고 목록은 마지막 메시지 시각 순이라, 새로 온 채팅이
+        // 목록 중간(보고 있던 줄 위)에 끼어들 수 있다(최근에 열어 보기만 한 옛 채팅이 앞 묶음에 먼저 오므로).
+        // 보고 있던 줄은 같은 자리에 두고, 새로 들어온 줄은 잠깐 표시해 어디에 끼었는지 보이게 한다
+        const before = new Set(chats?.map(chat => chat.key));
         const scroller = getScroller();
         const top = scroller && scroller !== document.scrollingElement ? scroller.getBoundingClientRect().top : 0;
         const anchor = /** @type {HTMLElement[]} */ ([...list.querySelectorAll('.st-lobby-item')])
@@ -175,6 +181,13 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
 
         // 지금 불러온 것보다 한 단계 더
         await load(step ? Math.max(loadedLimit, chats?.length ?? 0) + step : 0);
+
+        freshKeys = new Set((chats ?? []).map(chat => chat.key).filter(k => !before.has(k)));
+        for (const el of list.querySelectorAll('.st-lobby-item')) {
+            if (freshKeys.has(/** @type {HTMLElement} */ (el).dataset.key ?? '')) el.classList.add('st-lobby-item-new');
+        }
+        clearTimeout(freshTimer);
+        freshTimer = window.setTimeout(() => freshKeys.clear(), 3000);
 
         if (!scroller || key === undefined) return;
         const same = /** @type {HTMLElement[]} */ ([...list.querySelectorAll('.st-lobby-item')]).find(el => el.dataset.key === key);
@@ -819,6 +832,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
         item.setAttribute('role', 'listitem');
         item.classList.toggle('st-lobby-item-open', open);
         item.classList.toggle('st-lobby-item-selected', selected.has(chat.key));
+        item.classList.toggle('st-lobby-item-new', freshKeys.has(chat.key));
 
         // 줄의 왼쪽 전체가 누르는 곳(모바일 터치 대상). 선택 모드에서는 선택, 아니면 채팅 열기
         const main = document.createElement('div');

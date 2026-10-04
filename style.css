@@ -340,6 +340,25 @@
     background-color: var(--black30a);
 }
 
+/* 더 불러오기로 새로 들어온 줄. 날짜 순서상 목록 중간에 끼어들 수 있어서 잠깐 표시해 준다 */
+.st-lobby-item-new {
+    animation: st-lobby-new 3s ease-out;
+}
+
+@keyframes st-lobby-new {
+    0%, 40% {
+        border-color: var(--SmartThemeQuoteColor);
+        box-shadow: inset 0 0 0 1px var(--SmartThemeQuoteColor);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .st-lobby-item-new {
+        animation: none;
+        border-color: var(--SmartThemeQuoteColor);
+    }
+}
+
 /* 줄의 왼쪽 전체가 누르는 곳 */
 .st-lobby-main {
     flex: 1;
