@@ -3,7 +3,7 @@ import { renderExtensionTemplateAsync } from '../../../../extensions.js';
 import { getGroupAvatar, groups } from '../../../../group-chats.js';
 import { Popup } from '../../../../popup.js';
 import { power_user } from '../../../../power-user.js';
-import { deleteLobbyChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
+import { deleteLobbyChat, describeChat, getSiblingChatNames, isChatBusy, isOpenChat, openLobbyChat, renameLobbyChat } from './chat-actions.js';
 import { EXTENSION_NAME, LOG_PREFIX, SORTS } from './constants.js';
 import { chatKey, getAllChats, getMatchedMessage, getOwnerChats, getOwnerOptions, ownerKey, searchOwnerChats } from './data-source.js';
 import { tr } from './i18n.js';
@@ -719,7 +719,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                     chat.snippet = await getMatchedMessage(chat, words, signal);
                 } catch (error) {
                     if (!alive()) return;
-                    console.warn(LOG_PREFIX, 'failed to load the matched message', chat, error);
+                    console.warn(LOG_PREFIX, 'failed to load the matched message', describeChat(chat), error);
                     chat.snippet = '';
                 }
                 state.completed++;
@@ -1195,7 +1195,7 @@ export async function createLobbyList(container, { onCount = () => { }, beforeOp
                     forgetChat(chat);
                     done++;
                 } catch (error) {
-                    console.error(LOG_PREFIX, 'failed to delete chat', chat, error);
+                    console.error(LOG_PREFIX, 'failed to delete chat', describeChat(chat), error);
                     failed++;
                 }
             }

@@ -26,6 +26,7 @@ import {
     selected_group,
 } from '../../../../group-chats.js';
 import { humanizedDateTime, isMobile } from '../../../../RossAscends-mods.js';
+import { waitUntilCondition } from '../../../../utils.js';
 import { LOG_PREFIX } from './constants.js';
 import { getCharacterChatNames, getLatestCharacterChat } from './data-source.js';
 import { tr } from './i18n.js';
@@ -56,6 +57,40 @@ function findGroup(groupId) {
 /** 응답 생성·저장 중이면 채팅을 바꾸거나 열린 채팅 파일을 건드리지 않는다 */
 export function isChatBusy() {
     return !!is_send_press || !!isChatSaving || !!is_group_generating;
+}
+
+/**
+ * 로그에 남길 채팅 정보. 미리보기(채팅 내용)는 빼서, 로그를 공유해도 대화가 새지 않게 한다
+ * @param {LobbyChat} chat
+ */
+export function describeChat(chat) {
+    return { key: chat.key, fileName: chat.fileName };
+}
+
+/** 채팅이 안 열렸을 때 원인을 찾을 수 있도록 ST 상태를 함께 남긴다 */
+function openState() {
+    return {
+        current: getCurrentChatId() ?? null,
+        characterId: this_chid ?? null,
+        group: selected_group || null,
+        saving: !!isChatSaving,
+        generating: !!is_send_press || !!is_group_generating,
+    };
+}
+
+/**
+ * 서버를 기다리는 사이 ST 가 채팅 저장이나 생성을 시작했을 수 있다.
+ * 그러면 ST 는 캐릭터를 바꾸지 않고 조용히 넘어가므로(selectCharacterById), 끝날 때까지 잠깐 기다린다
+ * @returns {Promise<boolean>} 기다려서 한가해졌으면 true
+ */
+async function waitForIdle() {
+    if (!isChatBusy()) return true;
+    try {
+        await waitUntilCondition(() => !isChatBusy(), 5000, 100);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -137,6 +172,11 @@ async function openCharacterFile(chat) {
     await unshallowCharacter(chid);
     const character = characters[chid];
 
+    if (!await waitForIdle()) {
+        toastr.info(tr('busy', 'Please wait until the reply is finished and the chat is saved.'));
+        return false;
+    }
+
     const isCurrentCharacter = !selected_group && this_chid !== undefined && String(this_chid) === String(chid);
     if (isCurrentCharacter) {
         // 같은 캐릭터: ST 의 채팅 전환과 같은 경로. 카드의 chat 필드 저장까지 해 준다
@@ -161,7 +201,7 @@ async function openCharacterFile(chat) {
     }
 
     if (getCurrentChatId() !== chat.fileName) {
-        console.warn(LOG_PREFIX, 'chat was not opened as requested', { chat, current: getCurrentChatId() });
+        console.warn(LOG_PREFIX, 'chat was not opened as requested', { chat: describeChat(chat), ...openState() });
         toastr.warning(tr('open_failed', 'Could not open the chat.'));
         return false;
     }
@@ -185,6 +225,11 @@ async function openGroupFile(chat) {
         return false;
     }
 
+    if (!await waitForIdle()) {
+        toastr.info(tr('busy', 'Please wait until the reply is finished and the chat is saved.'));
+        return false;
+    }
+
     if (selected_group === chat.groupId) {
         await openGroupChat(chat.groupId, chat.fileName);
     } else {
@@ -196,7 +241,7 @@ async function openGroupFile(chat) {
     }
 
     if (selected_group !== chat.groupId || getCurrentChatId() !== chat.fileName) {
-        console.warn(LOG_PREFIX, 'group chat was not opened as requested', { chat, current: getCurrentChatId() });
+        console.warn(LOG_PREFIX, 'group chat was not opened as requested', { chat: describeChat(chat), ...openState() });
         toastr.warning(tr('open_failed', 'Could not open the chat.'));
         return false;
     }
